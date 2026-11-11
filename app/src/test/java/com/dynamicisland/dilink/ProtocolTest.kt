@@ -1,6 +1,7 @@
 package com.dynamicisland.dilink
 
 import com.dynamicisland.dilink.link.Envelope
+import com.dynamicisland.dilink.link.IdlePolicy
 import com.dynamicisland.dilink.link.LinkClient
 import com.dynamicisland.dilink.link.LinkState
 import com.dynamicisland.dilink.link.Pairing
@@ -247,6 +248,37 @@ class ProtocolTest {
         assertEquals(listOf("Созвон"), store.events().map { it.title })
 
         file.delete()
+    }
+
+    @Test
+    fun idlePolicyClosesOnlyAfterTimeout() {
+        val minute = 60_000L
+        // Девять минут при пороге десять — канал жив.
+        assertTrue(
+            !IdlePolicy.shouldDisconnect(
+                now = 9 * minute, lastActivity = 0, minutes = 10, enabled = true, connected = true
+            )
+        )
+        // Ровно порог — закрываем.
+        assertTrue(
+            IdlePolicy.shouldDisconnect(
+                now = 10 * minute, lastActivity = 0, minutes = 10, enabled = true, connected = true
+            )
+        )
+        // Без соединения или с выключенным правилом ничего не трогаем.
+        assertTrue(
+            !IdlePolicy.shouldDisconnect(
+                now = 60 * minute, lastActivity = 0, minutes = 1, enabled = true, connected = false
+            )
+        )
+        assertTrue(
+            !IdlePolicy.shouldDisconnect(
+                now = 60 * minute, lastActivity = 0, minutes = 1, enabled = false, connected = true
+            )
+        )
+        // Порог зажимается в разумные границы.
+        assertEquals(minute, IdlePolicy.idleMillis(0))
+        assertEquals(240 * minute, IdlePolicy.idleMillis(10_000))
     }
 
     private fun ByteString.size(): Int = toByteArray().size

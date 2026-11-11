@@ -11,7 +11,9 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
 import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.dynamicisland.dilink.R
@@ -54,6 +56,8 @@ class LinkService : Service() {
         val lastError = Observable("")
         val serverName = Observable("")
 
+        private const val IDLE_TICK_MS = 60_000L
+
         fun start(context: Context) {
             val intent = Intent(context, LinkService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) context.startForegroundService(intent)
@@ -73,6 +77,11 @@ class LinkService : Service() {
     private var media: MediaBridge? = null
     private var wakeLock: PowerManager.WakeLock? = null
     private val transferList = LinkedHashMap<String, FileTransfer.Progress>()
+    private val handler = Handler(Looper.getMainLooper())
+
+    /** Время последнего живого обмена с компьютером — для автозакрытия канала. */
+    @Volatile
+    private var lastActivity = System.currentTimeMillis()
 
     override fun onCreate() {
         super.onCreate()
@@ -95,6 +104,40 @@ class LinkService : Service() {
         }
 
         if (settings.isPaired && settings.autoConnect) connect()
+        scheduleIdleCheck()
+    }
+
+    /**
+     * Безопасность: канал не должен висеть вечно. Если с компьютером нет
+     * обмена дольше настроенного времени, соединение рвётся и сокет закрывается.
+     */
+    private fun scheduleIdleCheck() {
+        handler.removeCallbacks(idleCheck)
+        handler.postDelayed(idleCheck, IDLE_TICK_MS)
+    }
+
+    private val idleCheck = object : Runnable {
+        override fun run() {
+            if (!settings.idleDisconnect) {
+                handler.postDelayed(this, IDLE_TICK_MS)
+                return
+            }
+            if (client != null && Companion.state.get() == LinkState.CONNECTED) {
+                val idleMinutes = (System.currentTimeMillis() - lastActivity) / 60_000
+                if (IdlePolicy.shouldDisconnect(
+                        now = System.currentTimeMillis(),
+                        lastActivity = lastActivity,
+                        minutes = settings.idleMinutes,
+                        enabled = true,
+                        connected = true
+                    )
+                ) {
+                    statusText.set("Отключено: $idleMinutes мин без активности")
+                    disconnect()
+                }
+            }
+            handler.postDelayed(this, IDLE_TICK_MS)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -162,6 +205,7 @@ class LinkService : Service() {
                 if (deviceId.isNotEmpty()) settings.deviceId = deviceId
                 serverName.set(name)
                 statusText.set("Подключено к ${target.display}")
+                lastActivity = System.currentTimeMillis()
                 // Полный снимок планера: всё, что накопилось без связи, уходит разом.
                 if (settings.plannerSync) {
                     send("planner.sync", JSONObject().apply { put("records", planner.snapshot()) })
@@ -209,6 +253,7 @@ class LinkService : Service() {
     }
 
     private fun handle(envelope: Envelope) {
+        lastActivity = System.currentTimeMillis()
         when (envelope.type) {
             "ping" -> send("pong", JSONObject().put("ts", System.currentTimeMillis() / 1000))
             "clipboard.push" -> {
@@ -240,6 +285,7 @@ class LinkService : Service() {
 
     /** Отправка кадра; при отсутствии связи он копится в очереди клиента. */
     fun send(type: String, payload: JSONObject = JSONObject()) {
+        lastActivity = System.currentTimeMillis()
         client?.send(type, payload)
     }
 

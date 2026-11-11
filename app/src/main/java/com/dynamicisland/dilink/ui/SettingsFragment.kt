@@ -39,6 +39,16 @@ class SettingsFragment : Fragment() {
         bind(binding.switchPlanner, { settings.plannerSync }, { settings.plannerSync = it })
         bind(binding.switchWifi, { settings.wifiOnly }, { settings.wifiOnly = it })
         bind(binding.switchAuto, { settings.autoConnect }, { settings.autoConnect = it })
+        bind(binding.switchIdle, { settings.idleDisconnect }, { settings.idleDisconnect = it })
+
+        binding.idleMinutes.setText(settings.idleMinutes.toString())
+        binding.idleMinutes.setOnFocusChangeListener { _, focused ->
+            if (!focused) saveIdleMinutes()
+        }
+        binding.idleMinutes.setOnEditorActionListener { _, _, _ ->
+            saveIdleMinutes()
+            false
+        }
 
         binding.grantNotifications.setOnClickListener {
             val intent = Intent(SystemSettings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
@@ -66,6 +76,17 @@ class SettingsFragment : Fragment() {
             write(value)
             LinkService.instance?.refreshAccess()
         }
+    }
+
+    /** Запоминает минуты простоя: пустое или нулевое поле возвращает прежнее значение. */
+    private fun saveIdleMinutes() {
+        val value = binding.idleMinutes.text.toString().toIntOrNull()
+        if (value == null || value <= 0) {
+            binding.idleMinutes.setText(settings.idleMinutes.toString())
+            return
+        }
+        settings.idleMinutes = value
+        binding.idleMinutes.setText(settings.idleMinutes.toString())
     }
 
     private fun addIgnored() {

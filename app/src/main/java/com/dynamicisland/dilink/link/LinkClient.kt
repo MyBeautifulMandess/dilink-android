@@ -194,6 +194,12 @@ class LinkClient(
             setState(LinkState.DISCONNECTED, reason)
             return
         }
+        // Компьютер мог закрыть порт по простою: не долбим его вечно.
+        if (attempt >= MAX_ATTEMPTS) {
+            running.set(false)
+            setState(LinkState.DISCONNECTED, "Компьютер не отвечает")
+            return
+        }
         setState(LinkState.CONNECTING, reason)
         val delay = RECONNECT[min(attempt, RECONNECT.lastIndex)]
         attempt++
@@ -209,6 +215,7 @@ class LinkClient(
 
     private companion object {
         const val MAX_QUEUE = 40
+        const val MAX_ATTEMPTS = 8
         val RECONNECT = longArrayOf(1_000, 2_000, 4_000, 8_000, 16_000, 30_000)
     }
 }

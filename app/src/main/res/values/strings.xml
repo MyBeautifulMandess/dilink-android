@@ -46,6 +46,9 @@
     <string name="row_planner">Календарь и напоминания</string>
     <string name="row_wifi_only">Только по Wi-Fi</string>
     <string name="row_auto">Подключаться при запуске</string>
+    <string name="row_idle">Отключаться при простое</string>
+    <string name="row_idle_minutes">Отключать через, мин</string>
+    <string name="idle_hint">Если с компьютером нет обмена дольше этого времени, канал закрывается: сокет и фоновая служба останавливаются, данные с телефона в сеть больше не уходят. Холодный старт — по кнопке «Подключить».</string>
     <string name="wifi_only_hint">В режиме «только Wi-Fi» уведомления не расходуют мобильный трафик. Без Wi-Fi связь всё равно работает, но уведомления не отправляются.</string>
 
     <string name="section_access">Доступы и исключения</string>

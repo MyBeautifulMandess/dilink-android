@@ -73,6 +73,16 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_DEVICE_ID, "") ?: ""
         set(value) = prefs.edit().putString(KEY_DEVICE_ID, value).apply()
 
+    /** Рвать канал, если компьютер не отвечает или телефон не нужен дольше N минут. */
+    var idleDisconnect: Boolean
+        get() = prefs.getBoolean(KEY_IDLE, true)
+        set(value) = prefs.edit().putBoolean(KEY_IDLE, value).apply()
+
+    /** Сколько минут держать канал без активности. 1–240. */
+    var idleMinutes: Int
+        get() = prefs.getInt(KEY_IDLE_MIN, 15).coerceIn(1, 240)
+        set(value) = prefs.edit().putInt(KEY_IDLE_MIN, value.coerceIn(1, 240)).apply()
+
     val isPaired: Boolean get() = address.isNotEmpty() && deviceToken.isNotEmpty()
 
     fun forget() {
@@ -98,5 +108,7 @@ class Settings(context: Context) {
         const val KEY_AUTO = "auto_connect"
         const val KEY_TOKEN = "token"
         const val KEY_DEVICE_ID = "device_id"
+        const val KEY_IDLE = "idle_disconnect"
+        const val KEY_IDLE_MIN = "idle_minutes"
     }
 }

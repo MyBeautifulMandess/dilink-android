@@ -25,25 +25,29 @@ import com.google.android.material.tabs.TabLayoutMediator
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
-    private val tabs = listOf(
-        R.string.tab_connection to LinkLinkFragment(),
-        R.string.tab_planner to PlannerFragment(),
-        R.string.tab_settings to SettingsFragment()
-    )
+    private val tabs: List<Pair<Int, Fragment>>
+        get() = listOf(
+            R.string.tab_connection to LinkLinkFragment(),
+            R.string.tab_calendar to CalendarFragment(),
+            R.string.tab_reminders to ReminderFragment(),
+            R.string.tab_settings to SettingsFragment()
+        )
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val pages = tabs
         binding.pager.adapter = object : FragmentStateAdapter(this) {
-            override fun getItemCount(): Int = tabs.size
-            override fun createFragment(position: Int): Fragment = tabs[position].second
+            override fun getItemCount(): Int = pages.size
+            override fun createFragment(position: Int): Fragment = pages[position].second
         }
         binding.pager.offscreenPageLimit = 2
         TabLayoutMediator(binding.tabs, binding.pager) { tab, position ->
-            tab.setText(tabs[position].first)
+            tab.setText(pages[position].first)
         }.attach()
+        binding.pager.setCurrentItem(intent.getIntExtra(EXTRA_OPEN_TAB, 0), false)
 
         LinkService.state.observe { state -> renderState(state) }
         LinkService.statusText.observe { text ->
@@ -94,7 +98,9 @@ class MainActivity : AppCompatActivity() {
         LinkService.instance?.refreshAccess()
     }
 
-    private companion object {
-        const val REQUEST_NOTIFICATIONS = 11
+    companion object {
+        /** С какой вкладки открыться: из уведомления напоминания сразу в список. */
+        const val EXTRA_OPEN_TAB = "open_tab"
+        private const val REQUEST_NOTIFICATIONS = 11
     }
 }

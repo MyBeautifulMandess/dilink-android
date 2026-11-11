@@ -8,7 +8,8 @@
     <string name="channel_transfer_desc">Прогресс получения и отправки файлов</string>
 
     <string name="tab_connection">Связь</string>
-    <string name="tab_planner">Календарь</string>
+    <string name="tab_calendar">Календарь</string>
+    <string name="tab_reminders">Напоминания</string>
     <string name="tab_settings">Настройки</string>
 
     <string name="status_disconnected">Не подключено</string>
@@ -54,6 +55,13 @@
 
     <string name="planner_local_only">Записи хранятся на телефоне и уйдут на компьютер при подключении</string>
     <string name="planner_empty">Пока пусто. Создайте событие или напоминание — при подключении оно появится на компьютере.</string>
+    <string name="calendar_empty">Событий нет. Нажмите «Событие» — запись появится здесь и уйдёт на компьютер при подключении.</string>
+    <string name="reminder_empty">Напоминаний нет. Нажмите «Напоминание» — телефон пришлёт уведомление в назначенный срок.</string>
+    <string name="reminder_alarm_hint">Точные будильники отключены в системе. Нажмите, чтобы разрешить — иначе напоминание может прийти с задержкой.</string>
+    <string name="channel_reminders">Напоминания</string>
+    <string name="channel_reminders_desc">Уведомления о сроках напоминаний</string>
+    <string name="action_reminder_done">Выполнено</string>
+    <string name="action_reminder_snooze">Отложить на 10 минут</string>
     <string name="planner_done">Выполнено</string>
     <string name="planner_kind_event">Событие</string>
     <string name="planner_kind_reminder">Напоминание</string>

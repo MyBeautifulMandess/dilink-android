@@ -16,7 +16,9 @@ import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import com.dynamicisland.dilink.R
 import com.dynamicisland.dilink.media.MediaBridge
+import com.dynamicisland.dilink.planner.PlannerRepository
 import com.dynamicisland.dilink.planner.PlannerStore
+import com.dynamicisland.dilink.reminder.ReminderReconciler
 import com.dynamicisland.dilink.store.Settings
 import com.dynamicisland.dilink.ui.MainActivity
 import com.dynamicisland.dilink.util.Observable
@@ -76,7 +78,7 @@ class LinkService : Service() {
         super.onCreate()
         instance = this
         settings = Settings(this)
-        planner = PlannerStore(File(filesDir, "planner.json"))
+        planner = PlannerRepository.get(this)
         planner.seedPending()
         createChannels()
         startForeground(NOTIFICATION_ID, buildNotification("Не подключено", ""))
@@ -202,6 +204,7 @@ class LinkService : Service() {
     /** Включает то, что имеет смысл только при живом канале. */
     private fun startExtras() {
         if (settings.clipboardSync) clipboard?.start() else clipboard?.stop()
+        ReminderReconciler.sync(this)
         if (settings.mediaSync && media?.hasAccess == true) media?.start() else media?.stop()
     }
 
@@ -226,7 +229,11 @@ class LinkService : Service() {
             "planner.push", "planner.sync" -> {
                 if (!settings.plannerSync) return
                 val incoming = PlannerStore.readPayload(envelope.payload)
-                if (incoming.isNotEmpty()) planner.merge(incoming)
+                if (incoming.isNotEmpty() && planner.merge(incoming).isNotEmpty()) {
+                    // Запись могла прийти из компьютера вместе с новым сроком:
+                    // будильник и уведомление пересобираются сразу.
+                    ReminderReconciler.sync(this)
+                }
             }
         }
     }

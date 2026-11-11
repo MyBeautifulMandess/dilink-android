@@ -210,5 +210,44 @@ class ProtocolTest {
         file.delete()
     }
 
+    @Test
+    fun eventsAndRemindersLiveApart() {
+        val file = File.createTempFile("planner", ".json")
+        val store = PlannerStore(file)
+
+        store.upsert(PlannerRecord(id = "e1", title = "Созвон", start = 5_000, end = 6_000))
+        store.upsert(PlannerRecord(id = "r1", kind = PlannerRecord.KIND_REMINDER, title = "Раньше", due = 7_000))
+        store.upsert(PlannerRecord(id = "r2", kind = PlannerRecord.KIND_REMINDER, title = "Позже", due = 9_000))
+        store.upsert(PlannerRecord(id = "r3", kind = PlannerRecord.KIND_REMINDER, title = "Старое", due = 1_000))
+
+        // Вкладки не видят чужие записи.
+        assertEquals(listOf("Созвон"), store.events().map { it.title })
+        assertTrue(store.reminders().none { it.isEvent })
+        assertEquals(3, store.reminders().size)
+
+        // Невыполненные идут по возрастанию срока.
+        assertEquals(listOf("Старое", "Раньше", "Позже"), store.reminders().map { it.title })
+
+        // Выполненное уезжает в конец, остальные сохраняют порядок.
+        store.setDone("r3", true)
+        assertEquals(listOf("Раньше", "Позже", "Старое"), store.reminders().map { it.title })
+
+        // Будильники ставятся только на невыполненные сроки.
+        assertEquals(listOf("Раньше", "Позже"), store.pendingReminders().map { it.title })
+        store.setDone("r1", true)
+        assertEquals(listOf("Позже"), store.pendingReminders().map { it.title })
+
+        // Перенос срока не снимает отметку: запись остаётся выполненной.
+        store.upsert(store.find("r1")!!.copy(due = 20_000))
+        assertTrue(store.find("r1")!!.done)
+
+        // Удалённое напоминание не возвращается в список будильников.
+        store.delete("r2")
+        assertTrue(store.pendingReminders().isEmpty())
+        assertEquals(listOf("Созвон"), store.events().map { it.title })
+
+        file.delete()
+    }
+
     private fun ByteString.size(): Int = toByteArray().size
 }

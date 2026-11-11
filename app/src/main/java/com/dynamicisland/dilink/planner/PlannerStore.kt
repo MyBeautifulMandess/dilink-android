@@ -19,7 +19,7 @@ class PlannerStore(private val file: File) {
     private val records = LinkedHashMap<String, PlannerRecord>()
     private val lock = Any()
 
-    /** Вызывается после каждого изменения набора — снаружи перерисовывается список. */
+    /** Вызывается после каждого изменения набора — снаружи перерисовываются списки. */
     @Volatile var onChanged: (() -> Unit)? = null
 
     init {
@@ -31,6 +31,30 @@ class PlannerStore(private val file: File) {
         records.values
             .filter { !it.deleted && it.anchor > 0 }
             .sortedBy { it.anchor }
+    }
+
+    /** Только события — для вкладки календаря. */
+    fun events(): List<PlannerRecord> = synchronized(lock) {
+        records.values
+            .filter { !it.deleted && it.isEvent && it.start > 0 }
+            .sortedBy { it.start }
+    }
+
+    /**
+     * Только напоминания. Невыполненные идут по возрастанию срока, выполненные
+     * — в конце: так ближайшее всегда сверху.
+     */
+    fun reminders(): List<PlannerRecord> = synchronized(lock) {
+        records.values
+            .filter { !it.deleted && !it.isEvent && it.due > 0 }
+            .sortedWith(compareBy({ it.done }, { it.due }))
+    }
+
+    /** Ближайшие невыполненные сроки — по ним ставятся будильники. */
+    fun pendingReminders(): List<PlannerRecord> = synchronized(lock) {
+        records.values
+            .filter { !it.deleted && !it.isEvent && !it.done && it.due > 0 }
+            .sortedBy { it.due }
     }
 
     fun all(): List<PlannerRecord> = synchronized(lock) { records.values.toList() }
@@ -48,6 +72,7 @@ class PlannerStore(private val file: File) {
     /**
      * Добавляет или правит запись с телефона. Время правки ставится сейчас —
      * именно оно победит на компьютере.
+     *
      */
     fun upsert(record: PlannerRecord): PlannerRecord {
         val stamped = record.copy(

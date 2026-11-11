@@ -12,54 +12,41 @@ import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.dynamicisland.dilink.R
-import com.dynamicisland.dilink.databinding.FragmentPlannerBinding
+import com.dynamicisland.dilink.databinding.FragmentCalendarBinding
 import com.dynamicisland.dilink.link.LinkService
 import com.dynamicisland.dilink.planner.PlannerRecord
-import com.dynamicisland.dilink.planner.PlannerStore
+import com.dynamicisland.dilink.planner.PlannerRepository
+import com.dynamicisland.dilink.reminder.ReminderReconciler
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
 /**
- * Календарь и напоминания телефона.
- *
- * Записи полноценно живут на телефоне: их можно создать без компьютера, они
- * сохранятся и уйдут на островок при подключении. Всё, что пришло с компьютера,
- * оказывается здесь же — слияние идёт по времени правки.
+ * Календарь: только события. Напоминания живут на отдельной вкладке, потому что
+ * у них другой ритм работы — их отмечают «выполнено», а не смотрят расписание.
  */
-class PlannerFragment : Fragment() {
+class CalendarFragment : Fragment() {
 
-    private var _binding: FragmentPlannerBinding? = null
+    private var _binding: FragmentCalendarBinding? = null
     private val binding get() = _binding!!
-    private var store: PlannerStore? = null
     private lateinit var adapter: PlannerAdapter
+    private var stopObserving: (() -> Unit)? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
-        _binding = FragmentPlannerBinding.inflate(inflater, container, false)
+        _binding = FragmentCalendarBinding.inflate(inflater, container, false)
         return binding.root
     }
 
     override fun onViewCreated(view: View, saved: Bundle?) {
         adapter = PlannerAdapter(
-            onDone = { record, done ->
-                val service = LinkService.instance
-                val store = store ?: service?.plannerStore() ?: return@PlannerAdapter
-                store.setDone(record.id, done)?.let { service?.pushPlanner(it) }
-                render()
-            },
-            onRemove = { record ->
-                val service = LinkService.instance
-                val store = store ?: service?.plannerStore() ?: return@PlannerAdapter
-                store.delete(record.id)?.let { service?.pushPlanner(it) }
-                render()
-            }
+            onDone = { _, _ -> },
+            onRemove = { record -> remove(record) }
         )
         binding.plannerList.layoutManager = LinearLayoutManager(requireContext())
         binding.plannerList.adapter = adapter
-
-        binding.addEvent.setOnClickListener { createDialog(PlannerRecord.KIND_EVENT) }
-        binding.addReminder.setOnClickListener { createDialog(PlannerRecord.KIND_REMINDER) }
+        binding.addEvent.setOnClickListener { createDialog() }
+        stopObserving = PlannerRepository.observe { com.dynamicisland.dilink.util.onMain { render() } }
         render()
     }
 
@@ -68,33 +55,29 @@ class PlannerFragment : Fragment() {
         render()
     }
 
-    private fun currentStore(): PlannerStore? {
-        val found = store ?: LinkService.instance?.plannerStore()
-        if (found != null && store !== found) {
-            store = found
-            found.onChanged = { com.dynamicisland.dilink.util.onMain { render() } }
-        }
-        return found
-    }
+    private fun store() = PlannerRepository.get(requireContext())
 
     private fun render() {
-        val store = currentStore() ?: run {
-            binding.plannerStatus.text = getString(R.string.planner_local_only)
-            return
-        }
-        val items = store.items()
+        val items = store().events()
         adapter.submit(items)
         binding.plannerEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
         val connected = LinkService.state.get() == com.dynamicisland.dilink.link.LinkState.CONNECTED
         binding.plannerStatus.text = if (connected) {
-            "${items.size} записей · синхронизировано с компьютером"
+            "${items.size} событий · синхронизировано"
         } else {
-            "${items.size} записей · уйдут на компьютер при подключении"
+            "${items.size} событий · уйдут при подключении"
         }
     }
 
-    /** Быстрое создание: название, дата и время — больше для поездки в одну руку не нужно. */
-    private fun createDialog(kind: String) {
+    private fun remove(record: PlannerRecord) {
+        val grave = store().delete(record.id) ?: return
+        LinkService.instance?.pushPlanner(grave)
+        ReminderReconciler.sync(requireContext())
+        render()
+    }
+
+    /** Событие: название, начало и длительность в один час. */
+    private fun createDialog() {
         val context = requireContext()
         val pad = (16 * resources.displayMetrics.density).toInt()
         val title = EditText(context).apply {
@@ -109,16 +92,9 @@ class PlannerFragment : Fragment() {
         }
 
         val calendar = Calendar.getInstance().apply {
-            if (kind == PlannerRecord.KIND_EVENT) {
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-                add(Calendar.HOUR_OF_DAY, 1)
-            } else {
-                add(Calendar.HOUR_OF_DAY, 1)
-                set(Calendar.MINUTE, 0)
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
-            }
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+            add(Calendar.HOUR_OF_DAY, 1)
         }
         val whenText = android.widget.TextView(context).apply {
             text = format(calendar.timeInMillis)
@@ -139,35 +115,21 @@ class PlannerFragment : Fragment() {
         wrapper.addView(whenText)
 
         AlertDialog.Builder(context)
-            .setTitle(
-                if (kind == PlannerRecord.KIND_EVENT) R.string.planner_dialog_event
-                else R.string.planner_dialog_reminder
-            )
+            .setTitle(R.string.planner_dialog_event)
             .setView(wrapper)
             .setPositiveButton(R.string.action_save) { _, _ ->
                 val text = title.text.toString().trim().ifEmpty { "Без названия" }
-                val at = calendar.timeInMillis
-                val record = if (kind == PlannerRecord.KIND_EVENT) {
+                val start = calendar.timeInMillis
+                val saved = store().upsert(
                     PlannerRecord(
                         id = "",
                         kind = PlannerRecord.KIND_EVENT,
                         title = text,
-                        start = at,
-                        end = at + 60 * 60 * 1000,
-                        allDay = false,
+                        start = start,
+                        end = start + 60 * 60 * 1000,
                         reminderMinutes = 10
                     )
-                } else {
-                    PlannerRecord(
-                        id = "",
-                        kind = PlannerRecord.KIND_REMINDER,
-                        title = text,
-                        due = at,
-                        source = "phone"
-                    )
-                }
-                val store = currentStore() ?: return@setPositiveButton
-                val saved = store.upsert(record)
+                )
                 LinkService.instance?.pushPlanner(saved)
                 render()
             }
@@ -179,7 +141,7 @@ class PlannerFragment : Fragment() {
         SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault()).format(Date(millis))
 
     override fun onDestroyView() {
-        store?.onChanged = null
+        stopObserving?.invoke()
         super.onDestroyView()
         _binding = null
     }

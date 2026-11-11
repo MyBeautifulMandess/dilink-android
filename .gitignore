@@ -1,0 +1,26 @@
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Локальная конфигурация SDK и подписи
+local.properties
+keystore.properties
+*.jks
+*.keystore
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+.DS_Store
+
+# Артефакты прогонов
+*.log
+*.hprof
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Готовые APK: они живут в релизах, а не в истории git
+*.apk
+*.aab

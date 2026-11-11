@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DI Link</string>
+    <string name="notification_listener_label">DI Link — уведомления телефона</string>
+    <string name="channel_service">Связь с компьютером</string>
+    <string name="channel_service_desc">Постоянное соединение с островком Dynamic Island</string>
+    <string name="channel_transfer">Передача файлов</string>
+    <string name="channel_transfer_desc">Прогресс получения и отправки файлов</string>
+
+    <string name="tab_connection">Связь</string>
+    <string name="tab_planner">Календарь</string>
+    <string name="tab_settings">Настройки</string>
+
+    <string name="status_disconnected">Не подключено</string>
+    <string name="status_connecting">Подключение…</string>
+    <string name="status_connected">Подключено к %1$s</string>
+    <string name="status_paired_none">Телефон не сопряжён</string>
+    <string name="status_paired">Компьютер: %1$s:%2$d</string>
+    <string name="pair_hint">Откройте на компьютере панель «Телефон» и отсканируйте QR-код. Ключ из кода станет постоянным — повторно сканировать не придётся.</string>
+
+    <string name="action_scan">Сканировать QR на компьютере</string>
+    <string name="action_connect">Подключиться</string>
+    <string name="action_disconnect">Отключиться</string>
+    <string name="action_forget">Забыть компьютер</string>
+    <string name="action_grant">Разрешить</string>
+    <string name="action_add">Добавить</string>
+    <string name="action_add_event">Событие</string>
+    <string name="action_add_reminder">Напоминание</string>
+    <string name="action_remove">Удалить</string>
+    <string name="action_send_file">Отправить файл на компьютер</string>
+    <string name="action_send_clipboard">Отправить буфер на компьютер</string>
+    <string name="action_cancel">Отмена</string>
+    <string name="action_save">Сохранить</string>
+
+    <string name="section_clipboard">Буфер обмена</string>
+    <string name="clipboard_hint">Скопированный текст уходит на компьютер, пока приложение открыто. Вставка с компьютера попадает в буфер телефона в любой момент.</string>
+    <string name="section_files">Файлы</string>
+    <string name="transfer_none">Передач пока не было. Файлы с компьютера сохраняются в папку Download/DI Link.</string>
+
+    <string name="section_sync">Что синхронизировать</string>
+    <string name="row_clipboard">Буфер обмена</string>
+    <string name="row_notifications">Уведомления на компьютер</string>
+    <string name="row_media">Медиаплеер телефона на островке</string>
+    <string name="row_files">Передача файлов</string>
+    <string name="row_planner">Календарь и напоминания</string>
+    <string name="row_wifi_only">Только по Wi-Fi</string>
+    <string name="row_auto">Подключаться при запуске</string>
+    <string name="wifi_only_hint">В режиме «только Wi-Fi» уведомления не расходуют мобильный трафик. Без Wi-Fi связь всё равно работает, но уведомления не отправляются.</string>
+
+    <string name="section_access">Доступы и исключения</string>
+    <string name="access_granted">Доступ к уведомлениям выдан — работают уведомления и медиаплеер.</string>
+    <string name="access_missing">Доступа к уведомлениям нет: без него не работают ни уведомления, ни медиаплеер.</string>
+    <string name="hint_ignore">Пакет в исключениях, например com.viber.voip</string>
+
+    <string name="planner_local_only">Записи хранятся на телефоне и уйдут на компьютер при подключении</string>
+    <string name="planner_empty">Пока пусто. Создайте событие или напоминание — при подключении оно появится на компьютере.</string>
+    <string name="planner_done">Выполнено</string>
+    <string name="planner_kind_event">Событие</string>
+    <string name="planner_kind_reminder">Напоминание</string>
+    <string name="planner_dialog_event">Новое событие</string>
+    <string name="planner_dialog_reminder">Новое напоминание</string>
+    <string name="planner_field_title">Название</string>
+    <string name="planner_field_when">Дата и время: ДД.ММ.ГГГГ ЧЧ:ММ</string>
+    <string name="planner_bad_date">Не удалось разобрать дату</string>
+
+    <string name="share_title">Отправить на компьютер?</string>
+    <string name="share_sending">Отправка…</string>
+    <string name="share_no_link">Нет связи с компьютером</string>
+    <string name="version_line">DI Link %1$s · Dynamic Island 1.3</string>
+</resources>

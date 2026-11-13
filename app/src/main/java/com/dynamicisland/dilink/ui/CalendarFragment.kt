@@ -14,6 +14,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.dynamicisland.dilink.R
 import com.dynamicisland.dilink.databinding.FragmentCalendarBinding
 import com.dynamicisland.dilink.link.LinkService
+import com.dynamicisland.dilink.planner.PlannerDays
 import com.dynamicisland.dilink.planner.PlannerRecord
 import com.dynamicisland.dilink.planner.PlannerRepository
 import com.dynamicisland.dilink.reminder.ReminderReconciler
@@ -23,15 +24,24 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Календарь: только события. Напоминания живут на отдельной вкладке, потому что
- * у них другой ритм работы — их отмечают «выполнено», а не смотрят расписание.
+ * Календарь: месячная сетка и события выбранного дня.
+ *
+ * Напоминания живут на отдельной вкладке, потому что у них другой ритм работы
+ * — их отмечают «выполнено», а не смотрят расписание.
  */
 class CalendarFragment : Fragment() {
 
     private var _binding: FragmentCalendarBinding? = null
     private val binding get() = _binding!!
     private lateinit var adapter: PlannerAdapter
+    private lateinit var grid: MonthGrid
     private var stopObserving: (() -> Unit)? = null
+
+    /** Месяц, который сейчас показан на сетке. */
+    private val cursor = Calendar.getInstance()
+
+    /** Выбранный день: по нему снизу показываются события. */
+    private val selected = Calendar.getInstance()
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         _binding = FragmentCalendarBinding.inflate(inflater, container, false)
@@ -45,6 +55,12 @@ class CalendarFragment : Fragment() {
         )
         binding.plannerList.layoutManager = LinearLayoutManager(requireContext())
         binding.plannerList.adapter = adapter
+
+        grid = MonthGrid(requireContext()) { year, month, day -> pickDay(year, month, day) }
+        binding.calendarGrid.addView(grid.root)
+
+        binding.prevMonth.setOnClickListener { shiftMonth(-1) }
+        binding.nextMonth.setOnClickListener { shiftMonth(1) }
         binding.addEvent.setOnClickListener { createDialog() }
         stopObserving = PlannerRepository.observe { com.dynamicisland.dilink.util.onMain { render() } }
         render()
@@ -58,7 +74,25 @@ class CalendarFragment : Fragment() {
     private fun store() = PlannerRepository.get(requireContext())
 
     private fun render() {
-        val items = store().events()
+        val events = store().events()
+        val marked = PlannerDays.markedDays(events, cursor.get(Calendar.YEAR), cursor.get(Calendar.MONTH))
+        grid.render(
+            cursor.get(Calendar.YEAR),
+            cursor.get(Calendar.MONTH),
+            selected.get(Calendar.YEAR),
+            selected.get(Calendar.MONTH),
+            selected.get(Calendar.DAY_OF_MONTH),
+            marked
+        )
+        binding.monthTitle.text = monthTitle(cursor.get(Calendar.YEAR), cursor.get(Calendar.MONTH))
+        binding.dayTitle.text = getString(R.string.calendar_day_title, dayTitle())
+
+        val items = PlannerDays.eventsOnDay(
+            events,
+            selected.get(Calendar.YEAR),
+            selected.get(Calendar.MONTH),
+            selected.get(Calendar.DAY_OF_MONTH)
+        )
         adapter.submit(items)
         binding.plannerEmpty.visibility = if (items.isEmpty()) View.VISIBLE else View.GONE
         val connected = LinkService.state.get() == com.dynamicisland.dilink.link.LinkState.CONNECTED
@@ -67,6 +101,28 @@ class CalendarFragment : Fragment() {
         } else {
             "${items.size} событий · уйдут при подключении"
         }
+    }
+
+    /** Тап по дате: выбираем день и показываем его события. */
+    private fun pickDay(year: Int, month: Int, day: Int) {
+        selected.set(year, month, day)
+        if (year != cursor.get(Calendar.YEAR) || month != cursor.get(Calendar.MONTH)) {
+            cursor.set(year, month, day)
+        }
+        render()
+    }
+
+    /** Стрелки месяцев: выбранный день переезжает вместе с календарём. */
+    private fun shiftMonth(step: Int) {
+        val day = selected.get(Calendar.DAY_OF_MONTH)
+        cursor.add(Calendar.MONTH, step)
+        val max = cursor.getActualMaximum(Calendar.DAY_OF_MONTH)
+        selected.set(
+            cursor.get(Calendar.YEAR),
+            cursor.get(Calendar.MONTH),
+            minOf(day, max)
+        )
+        render()
     }
 
     private fun remove(record: PlannerRecord) {
@@ -91,10 +147,25 @@ class CalendarFragment : Fragment() {
             addView(title)
         }
 
-        val calendar = Calendar.getInstance().apply {
-            set(Calendar.SECOND, 0)
+        // По умолчанию ставим событие на выбранный день: так календарь читается
+        // как календарь, а не как список без привязки к дате.
+        val now = Calendar.getInstance()
+        val startOfDay = Calendar.getInstance().apply {
+            clear()
+            set(
+                selected.get(Calendar.YEAR),
+                selected.get(Calendar.MONTH),
+                selected.get(Calendar.DAY_OF_MONTH),
+                0, 0, 0
+            )
             set(Calendar.MILLISECOND, 0)
-            add(Calendar.HOUR_OF_DAY, 1)
+        }
+        val isToday = now.get(Calendar.YEAR) == startOfDay.get(Calendar.YEAR) &&
+            now.get(Calendar.MONTH) == startOfDay.get(Calendar.MONTH) &&
+            now.get(Calendar.DAY_OF_MONTH) == startOfDay.get(Calendar.DAY_OF_MONTH)
+        val calendar = (startOfDay.clone() as Calendar).apply {
+            set(Calendar.HOUR_OF_DAY, if (isToday) now.get(Calendar.HOUR_OF_DAY) + 1 else 12)
+            set(Calendar.MINUTE, 0)
         }
         val whenText = android.widget.TextView(context).apply {
             text = format(calendar.timeInMillis)
@@ -131,10 +202,25 @@ class CalendarFragment : Fragment() {
                     )
                 )
                 LinkService.instance?.pushPlanner(saved)
+                selected.timeInMillis = start
+                cursor.timeInMillis = start
                 render()
             }
             .setNegativeButton(R.string.action_cancel, null)
             .show()
+    }
+
+    /** «Ноябрь 2026» — название месяца и год. */
+    private fun monthTitle(year: Int, month: Int): String {
+        val names = resources.getStringArray(R.array.month_names)
+        return "${names.getOrElse(month) { "" }} $year"
+    }
+
+    /** «13 ноября 2026» — выбранный день словами. */
+    private fun dayTitle(): String {
+        val names = resources.getStringArray(R.array.month_names_gen)
+        val month = names.getOrElse(selected.get(Calendar.MONTH)) { "" }
+        return "${selected.get(Calendar.DAY_OF_MONTH)} $month ${selected.get(Calendar.YEAR)}"
     }
 
     private fun format(millis: Long): String =

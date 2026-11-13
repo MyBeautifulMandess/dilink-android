@@ -93,10 +93,10 @@ class LiveLinkHarness {
             }
         })
 
-        transfer = FileTransfer(client, null) { File(System.getProperty("java.io.tmpdir"), "di-live-downloads") }
+        transfer = FileTransfer(client, null, { File(System.getProperty("java.io.tmpdir"), "di-live-downloads") })
         transfer.onProgress = { }
-        transfer.onFinished = { progress, file ->
-            println("FILE_OK ${progress.name} → ${file?.absolutePath} (${file?.length()} байт)")
+        transfer.onFinished = { progress ->
+            println("FILE_OK ${progress.name} → ${progress.savedPath} (${progress.total} байт)")
             transferDone.countDown()
         }
         transfer.onFailed = { message ->

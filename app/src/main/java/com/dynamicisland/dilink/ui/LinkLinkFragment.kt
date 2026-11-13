@@ -2,21 +2,26 @@ package com.dynamicisland.dilink.ui
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
 import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.dynamicisland.dilink.R
 import com.dynamicisland.dilink.databinding.FragmentLinkBinding
+import com.dynamicisland.dilink.link.FileTransfer
 import com.dynamicisland.dilink.link.LinkService
 import com.dynamicisland.dilink.link.LinkState
 import com.dynamicisland.dilink.link.Pairing
 import com.dynamicisland.dilink.store.Settings
 import org.json.JSONObject
+import java.io.File
 
 /**
  * Экран связи: сопряжение, состояние канала, последние передачи и ручная
@@ -48,7 +53,10 @@ class LinkLinkFragment : Fragment() {
     override fun onViewCreated(view: View, saved: Bundle?) {
         settings = Settings(requireContext())
 
-        adapter = TransferAdapter()
+        adapter = TransferAdapter(
+            onOpen = { item -> openFile(item) },
+            onLocate = { item -> locateFile(item) }
+        )
         binding.transfers.layoutManager = LinearLayoutManager(requireContext())
         binding.transfers.adapter = adapter
 
@@ -200,6 +208,67 @@ class LinkLinkFragment : Fragment() {
     private fun showError(message: String) {
         binding.error.text = message
         binding.error.visibility = View.VISIBLE
+    }
+
+    /**
+     * Открывает полученный файл: картинка — из галереи, остальное — через
+     * FileProvider, чтобы систему не ругалась на «небезопасный» файл.
+     */
+    private fun openFile(item: FileTransfer.Progress) {
+        val path = item.savedPath ?: return
+        val context = requireContext()
+        val uri = item.savedUri?.let { Uri.parse(it) } ?: try {
+            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
+        } catch (e: Exception) {
+            null
+        }
+        if (uri == null) {
+            showError(getString(R.string.transfer_no_app))
+            return
+        }
+        val mime = context.contentResolver.getType(uri) ?: mimeOf(item.name)
+        val intent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        try {
+            startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            showError(getString(R.string.transfer_no_app))
+        }
+    }
+
+    /** Показывает, где файл лежит, и кладёт путь в буфер — его можно вставить в «Проводник». */
+    private fun locateFile(item: FileTransfer.Progress) {
+        val path = item.savedPath ?: return
+        val location = item.savedLocation.orEmpty()
+        val text = if (location.isEmpty()) path else "$location\n$path"
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.transfer_locate_title)
+            .setMessage(text)
+            .setPositiveButton(R.string.transfer_locate_copy) { _, _ ->
+                val clipboard = requireContext()
+                    .getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                    as? android.content.ClipboardManager
+                clipboard?.setPrimaryClip(android.content.ClipData.newPlainText(path, path))
+                showError(getString(R.string.transfer_locate_copied))
+            }
+            .setNegativeButton(R.string.action_cancel, null)
+            .show()
+    }
+
+    private fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+        "jpg", "jpeg" -> "image/jpeg"
+        "png" -> "image/png"
+        "gif" -> "image/gif"
+        "webp" -> "image/webp"
+        "pdf" -> "application/pdf"
+        "txt", "log" -> "text/plain"
+        "zip" -> "application/zip"
+        "mp3" -> "audio/mpeg"
+        "mp4" -> "video/mp4"
+        else -> "*/*"
     }
 
     override fun onDestroyView() {

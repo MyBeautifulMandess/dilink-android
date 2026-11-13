@@ -220,11 +220,11 @@ class LinkService : Service() {
         })
         client = link
 
-        files = FileTransfer(link, contentResolver) { downloadsFolder() }.apply {
+        files = FileTransfer(link, contentResolver, { downloadsFolder() }, GallerySaver(this)).apply {
             onProgress = { progress -> updateTransfer(progress) }
-            onFinished = { progress, file ->
+            onFinished = { progress ->
                 updateTransfer(progress)
-                notifyTransfer(progress, file)
+                notifyTransfer(progress)
             }
             onFailed = { message -> lastError.set(message) }
         }
@@ -416,11 +416,12 @@ class LinkService : Service() {
         manager.notify(NOTIFICATION_ID, buildNotification(title, text))
     }
 
-    private fun notifyTransfer(progress: FileTransfer.Progress, file: File?) {
+    private fun notifyTransfer(progress: FileTransfer.Progress) {
         if (progress.failed != null) return
         val manager = getSystemService(NotificationManager::class.java)
         val text = if (progress.incoming) {
-            file?.let { "Сохранено: ${it.name}" } ?: progress.name
+            val where = progress.savedLocation?.let { " — $it" } ?: ""
+            "Сохранено: ${progress.name}$where"
         } else "Отправлено: ${progress.name}"
         manager.notify(
             progress.id.hashCode(),

@@ -16,7 +16,8 @@ import java.util.UUID
 class FileTransfer(
     private val client: LinkClient,
     private val resolver: ContentResolver?,
-    private val targetDirectory: () -> File
+    private val targetDirectory: () -> File,
+    private val gallery: GallerySaver? = null
 ) {
     data class Progress(
         val id: String,
@@ -25,7 +26,14 @@ class FileTransfer(
         val transferred: Long,
         val total: Long,
         val done: Boolean = false,
-        val failed: String? = null
+        val failed: String? = null,
+        /** Куда лег файл: абсолютный путь на диске. */
+        val savedPath: String? = null,
+        /** То же самое словами: «Pictures/DI Link» или «Download/DI Link». */
+        val savedLocation: String? = null,
+        /** Адрес в галерее, если файл туда попал. */
+        val savedUri: String? = null,
+        val inGallery: Boolean = false
     ) {
         val percent: Int get() = if (total <= 0) 0 else ((transferred * 100) / total).toInt().coerceIn(0, 100)
     }
@@ -54,7 +62,7 @@ class FileTransfer(
 
     /** Колбэк прогресса вызывается из сетевого потока. */
     var onProgress: ((Progress) -> Unit)? = null
-    var onFinished: ((Progress, File?) -> Unit)? = null
+    var onFinished: ((Progress) -> Unit)? = null
     var onFailed: ((String) -> Unit)? = null
 
     fun handle(envelope: Envelope) {
@@ -141,9 +149,27 @@ class FileTransfer(
                 item.part.copyTo(item.target, overwrite = true)
                 item.part.delete()
             }
-            val done = Progress(id, item.name, true, item.total, item.total, done = true)
+            // Картинки сразу уезжают в галерею, остальные остаются в «Загрузках».
+            val saved = if (gallery != null && GallerySaver.isImage(item.name)) {
+                gallery.save(item.target, GallerySaver.mimeFor(item.name))
+            } else {
+                null
+            }
+            if (saved != null) item.target.delete()
+            val done = Progress(
+                id = id,
+                name = item.name,
+                incoming = true,
+                transferred = item.total,
+                total = item.total,
+                done = true,
+                savedPath = saved?.path ?: item.target.absolutePath,
+                savedLocation = saved?.location ?: item.target.parent,
+                savedUri = saved?.uri?.toString(),
+                inGallery = saved != null
+            )
             report(done)
-            onFinished?.invoke(done, item.target)
+            onFinished?.invoke(done)
         } catch (e: Exception) {
             fail(id, "Не удалось сохранить файл: ${e.message}")
         }
@@ -196,7 +222,7 @@ class FileTransfer(
             client.send("file.done", org.json.JSONObject().apply { put("id", item.id) })
             val done = Progress(item.id, item.name, false, item.total, item.total, done = true)
             report(done)
-            onFinished?.invoke(done, null)
+            onFinished?.invoke(done)
         } catch (e: Exception) {
             fail(item.id, "Отправка прервалась: ${e.message}")
             client.send("file.cancel", org.json.JSONObject().apply { put("id", item.id); put("reason", "read") })

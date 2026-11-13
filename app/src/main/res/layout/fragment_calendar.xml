@@ -48,16 +48,66 @@
             app:iconSize="18dp" />
     </LinearLayout>
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="12dp">
+
+        <ImageButton
+            android:id="@+id/prevMonth"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/calendar_prev_month"
+            android:src="@drawable/ic_prev" />
+
+        <TextView
+            android:id="@+id/monthTitle"
+            style="@style/Text_DiLink_Section"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:textSize="16sp" />
+
+        <ImageButton
+            android:id="@+id/nextMonth"
+            android:layout_width="36dp"
+            android:layout_height="36dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/calendar_next_month"
+            android:src="@drawable/ic_next" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/calendarGrid"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp" />
+
     <TextView
         android:id="@+id/plannerStatus"
         style="@style/Text_DiLink_Caption"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:paddingStart="16dp"
-        android:paddingTop="4dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="6dp"
-        android:text="@string/planner_local_only" />
+        android:paddingTop="8dp"
+        android:paddingEnd="16dp" />
+
+    <TextView
+        android:id="@+id/dayTitle"
+        style="@style/Text_DiLink_Section"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="16dp" />
 
     <LinearLayout
         android:id="@+id/plannerEmpty"

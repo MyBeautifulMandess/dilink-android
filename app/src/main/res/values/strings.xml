@@ -44,7 +44,15 @@
     <string name="section_clipboard">Буфер обмена</string>
     <string name="clipboard_hint">Скопированный текст уходит на компьютер, пока приложение открыто. Вставка с компьютера попадает в буфер телефона в любой момент.</string>
     <string name="section_files">Файлы</string>
-    <string name="transfer_none">Передач пока не было. Файлы с компьютера сохраняются в папку Download/DI Link.</string>
+    <string name="transfer_none">Передач пока не было. Картинки с компьютера сразу попадают в галерею, остальные файлы — в папку Download/DI Link.</string>
+    <string name="action_open_file">Открыть</string>
+    <string name="action_locate_file">Где лежит</string>
+    <string name="transfer_saved_gallery">%1$s/%2$s — в галерее</string>
+    <string name="transfer_saved_file">%1$s/%2$s</string>
+    <string name="transfer_no_app">Не нашлось приложения, которое открывает этот файл</string>
+    <string name="transfer_locate_title">Где лежит файл</string>
+    <string name="transfer_locate_copy">Скопировать путь</string>
+    <string name="transfer_locate_copied">Путь скопирован в буфер обмена</string>
 
     <string name="section_sync">Что синхронизировать</string>
     <string name="row_clipboard">Буфер обмена</string>
@@ -81,6 +89,50 @@
     <string name="planner_field_title">Название</string>
     <string name="planner_field_when">Дата и время: ДД.ММ.ГГГГ ЧЧ:ММ</string>
     <string name="planner_bad_date">Не удалось разобрать дату</string>
+
+    <string name="calendar_prev_month">Предыдущий месяц</string>
+    <string name="calendar_next_month">Следующий месяц</string>
+    <string name="calendar_day_title">События: %1$s</string>
+
+    <string-array name="month_names">
+        <item>Январь</item>
+        <item>Февраль</item>
+        <item>Март</item>
+        <item>Апрель</item>
+        <item>Май</item>
+        <item>Июнь</item>
+        <item>Июль</item>
+        <item>Август</item>
+        <item>Сентябрь</item>
+        <item>Октябрь</item>
+        <item>Ноябрь</item>
+        <item>Декабрь</item>
+    </string-array>
+
+    <string-array name="month_names_gen">
+        <item>января</item>
+        <item>февраля</item>
+        <item>марта</item>
+        <item>апреля</item>
+        <item>мая</item>
+        <item>июня</item>
+        <item>июля</item>
+        <item>августа</item>
+        <item>сентября</item>
+        <item>октября</item>
+        <item>ноября</item>
+        <item>декабря</item>
+    </string-array>
+
+    <string-array name="weekday_names">
+        <item>Пн</item>
+        <item>Вт</item>
+        <item>Ср</item>
+        <item>Чт</item>
+        <item>Пт</item>
+        <item>Сб</item>
+        <item>Вс</item>
+    </string-array>
 
     <string name="share_title">Отправить на компьютер?</string>
     <string name="share_sending">Отправка…</string>

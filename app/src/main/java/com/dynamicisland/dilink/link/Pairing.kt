@@ -21,8 +21,10 @@ data class Pairing(
 
         /**
          * Разбирает данные сопряжения из строки. Принимает и полную ссылку
-         * `dilink://v1?ip=…&port=…&token=…`, и голый набор параметров, и адрес
-         * вида `192.168.1.4:19532` — в последнем случае ключ берётся отдельно.
+         * `dilink://v1?ip=…&port=…&token=…`, и адрес страницы сопряжения
+         * `http://192.168.1.4:19532/di/pair?ip=…&port=…&token=…`, и голый
+         * набор параметров, и адрес вида `192.168.1.4:19532` — в последнем
+         * случае ключ берётся отдельно.
          *
          * Камера телефона не всегда умеет открывать нестандартные схемы: она
          * лишь распознаёт код и предлагает скопировать ссылку. Поэтому строка
@@ -37,6 +39,7 @@ data class Pairing(
             text = text.trim('"', '\'', ' ', '\n', '\r', '\t')
 
             var values = HashMap<String, String>()
+            var authority: String? = null
 
             val schemeAt = text.indexOf(SCHEME, ignoreCase = true)
             if (schemeAt >= 0) {
@@ -47,6 +50,17 @@ data class Pairing(
                     if (version.isNotEmpty() && version != "v1") return null
                     values = parseQuery(rest.substring(queryStart + 1))
                 }
+            } else if (text.startsWith("http://", ignoreCase = true) ||
+                text.startsWith("https://", ignoreCase = true)
+            ) {
+                // Страница сопряжения на компьютере: камера открывает её в
+                // браузере, а данные лежат в адресе страницы.
+                val withoutScheme = text.substringAfter("://")
+                val queryStart = withoutScheme.indexOf('?')
+                val hostPart =
+                    if (queryStart >= 0) withoutScheme.substring(0, queryStart) else withoutScheme
+                authority = hostPart.substringBefore('/')
+                if (queryStart >= 0) values = parseQuery(withoutScheme.substring(queryStart + 1))
             } else if (text.contains('=')) {
                 // Голые параметры без схемы: ip=…&port=…&token=…
                 values = parseQuery(text.substringAfter('?', text))
@@ -56,8 +70,10 @@ data class Pairing(
             var port = values["port"]?.toIntOrNull()
             var token = values["token"]
 
+            if (address == null && authority != null) address = authority
+
             // Голый адрес вида 192.168.1.4:19532 — без параметров и без схемы.
-            if (address == null && schemeAt < 0 && !text.contains('=')) {
+            if (address == null && schemeAt < 0 && authority == null && !text.contains('=')) {
                 address = text
             }
 

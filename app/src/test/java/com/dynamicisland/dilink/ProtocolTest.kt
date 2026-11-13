@@ -133,6 +133,26 @@ class ProtocolTest {
     }
 
     @Test
+    fun pairingParsesHttpPairingPageUrl() {
+        // QR ведёт на страницу сопряжения: камера открывает её в браузере.
+        val url = "http://192.168.1.4:19532/di/pair?ip=192.168.1.4&port=19532&token=key5"
+        val pairing = Pairing.parse(url)
+        assertNotNull(pairing)
+        assertEquals("192.168.1.4", pairing!!.address)
+        assertEquals(19532, pairing.port)
+        assertEquals("key5", pairing.token)
+
+        // Без запроса берём адрес и порт из самого URL.
+        val bare = Pairing.parse("http://10.0.0.5:19532/di/pair", "key6")
+        assertEquals("10.0.0.5", bare?.address)
+        assertEquals(19532, bare?.port)
+        assertEquals("key6", bare?.token)
+
+        // Страница без данных сопряжения — разбор не проходит.
+        assertEquals(null, Pairing.parse("http://192.168.1.4:19532/di/pair"))
+    }
+
+    @Test
     fun clientHandshakesAndSendsPlannerSnapshot() {
         val authorized = CountDownLatch(1)
         val snapshot = LinkedBlockingQueue<String>()

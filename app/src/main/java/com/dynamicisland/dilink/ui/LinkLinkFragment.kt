@@ -57,6 +57,8 @@ class LinkLinkFragment : Fragment() {
         binding.transfers.adapter = adapter
 
         binding.scan.setOnClickListener { scan() }
+        binding.paste.setOnClickListener { pasteFromClipboard() }
+        binding.manualConnect.setOnClickListener { pairManual() }
         binding.connect.setOnClickListener {
             if (settings.isPaired) LinkService.instance?.reconnect() else scan()
         }
@@ -138,6 +140,62 @@ class LinkLinkFragment : Fragment() {
             showError("Это не код DI Link")
             return
         }
+        applyPairing(pairing)
+    }
+
+    /**
+     * Вставка из буфера: камера телефона часто только распознаёт ссылку и
+     * предлагает её скопировать — этот путь закрывает сопряжение без камеры.
+     */
+    private fun pasteFromClipboard() {
+        val clipboard = requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                as? android.content.ClipboardManager
+        val text = clipboard?.primaryClip
+            ?.takeIf { it.itemCount > 0 }
+            ?.getItemAt(0)
+            ?.coerceToText(requireContext())
+            ?.toString()
+            .orEmpty()
+        if (text.isBlank()) {
+            showError("В буфере обмена пусто")
+            return
+        }
+
+        val pairing = Pairing.parse(text)
+        if (pairing != null) {
+            binding.manualLink.setText(text.trim())
+            binding.manualToken.setText(pairing.token)
+            applyPairing(pairing)
+            return
+        }
+
+        // В буфере может лежать голый ключ — тогда адрес берём из поля ввода.
+        val key = text.trim()
+        if (key.length >= 32 && key.all { it.isLetterOrDigit() }) {
+            binding.manualToken.setText(key)
+            showError("Ключ вставлен. Укажите адрес компьютера и нажмите «Подключиться по ссылке»")
+            return
+        }
+        showError("Это не ссылка DI Link")
+    }
+
+    /** Ручной ввод: адрес и ключ из полей. */
+    private fun pairManual() {
+        val link = binding.manualLink.text.toString().trim()
+        val token = binding.manualToken.text.toString().trim()
+        if (link.isEmpty()) {
+            showError("Укажите адрес компьютера")
+            return
+        }
+        val pairing = Pairing.parse(link, token)
+        if (pairing == null) {
+            showError("Не получилось разобрать адрес и ключ")
+            return
+        }
+        applyPairing(pairing)
+    }
+
+    private fun applyPairing(pairing: Pairing) {
         settings.address = pairing.address
         settings.port = pairing.port
         settings.deviceToken = pairing.token

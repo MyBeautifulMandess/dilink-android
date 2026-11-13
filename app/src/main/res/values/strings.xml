@@ -20,6 +20,12 @@
     <string name="pair_hint">Откройте на компьютере панель «Телефон» и отсканируйте QR-код. Ключ из кода станет постоянным — повторно сканировать не придётся.</string>
 
     <string name="action_scan">Сканировать QR на компьютере</string>
+    <string name="section_manual">Подключение без QR</string>
+    <string name="manual_hint">Камера телефона не всегда открывает приложение по QR-коду: иногда она лишь распознаёт ссылку. Тогда скопируйте её и вставьте сюда — или впишите адрес и ключ вручную.</string>
+    <string name="manual_link_hint">Ссылка: dilink://v1?ip=…&amp;port=…&amp;token=… или 192.168.1.4:19532</string>
+    <string name="manual_token_hint">Ключ (token) — 64 символа из QR-кода</string>
+    <string name="action_paste">Вставить из буфера</string>
+    <string name="action_manual_connect">Подключиться по ссылке</string>
     <string name="action_connect">Подключиться</string>
     <string name="action_disconnect">Отключиться</string>
     <string name="action_forget">Забыть компьютер</string>

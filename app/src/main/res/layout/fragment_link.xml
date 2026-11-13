@@ -44,6 +44,64 @@
                     android:layout_marginTop="14dp"
                     android:text="@string/action_scan" />
 
+                <TextView
+                    style="@style/Text_DiLink_Section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="20dp"
+                    android:text="@string/section_manual" />
+
+                <TextView
+                    style="@style/Text_DiLink_Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/manual_hint" />
+
+                <EditText
+                    android:id="@+id/manualLink"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:hint="@string/manual_link_hint"
+                    android:inputType="textUri|textNoSuggestions"
+                    android:maxLines="3"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:autofillHints="" />
+
+                <EditText
+                    android:id="@+id/manualToken"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:hint="@string/manual_token_hint"
+                    android:inputType="textVisiblePassword|textNoSuggestions"
+                    android:maxLines="2"
+                    android:textColor="@color/text_primary"
+                    android:textColorHint="@color/text_secondary"
+                    android:textSize="14sp"
+                    android:autofillHints="" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/paste"
+                    style="@style/Widget_DiLink_Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="@color/surface_high"
+                    android:text="@string/action_paste"
+                    android:textColor="@color/text_primary" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/manualConnect"
+                    style="@style/Widget_DiLink_Button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/action_manual_connect" />
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

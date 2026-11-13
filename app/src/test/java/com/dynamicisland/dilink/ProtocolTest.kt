@@ -104,6 +104,35 @@ class ProtocolTest {
     }
 
     @Test
+    fun pairingAcceptsManualInputVariants() {
+        // Камера может отдать ссылку в кавычках или с переносом строки.
+        val quoted = Pairing.parse("  \"dilink://v1?ip=10.0.0.5&port=19532&token=key1\"  ")
+        assertEquals("10.0.0.5", quoted?.address)
+        assertEquals("key1", quoted?.token)
+
+        // Ссылка может прийти с большой буквы в схеме.
+        val upper = Pairing.parse("DILINK://v1?ip=10.0.0.6&port=19532&token=key2")
+        assertEquals("10.0.0.6", upper?.address)
+        assertEquals("key2", upper?.token)
+
+        // Голые параметры без схемы — так выглядит скопированный текст.
+        val bare = Pairing.parse("ip=10.0.0.7&port=19532&token=key3")
+        assertEquals("10.0.0.7", bare?.address)
+        assertEquals(19532, bare?.port)
+        assertEquals("key3", bare?.token)
+
+        // Адрес с портом в одном поле, ключ вводится отдельно.
+        val hostPort = Pairing.parse("10.0.0.8:19532", "key4")
+        assertEquals("10.0.0.8", hostPort?.address)
+        assertEquals(19532, hostPort?.port)
+        assertEquals("key4", hostPort?.token)
+
+        // Без ключа в любом виде разбор не проходит.
+        assertEquals(null, Pairing.parse("10.0.0.9:19532"))
+        assertEquals(null, Pairing.parse("dilink://v1?ip=10.0.0.9&port=19532"))
+    }
+
+    @Test
     fun clientHandshakesAndSendsPlannerSnapshot() {
         val authorized = CountDownLatch(1)
         val snapshot = LinkedBlockingQueue<String>()

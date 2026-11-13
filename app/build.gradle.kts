@@ -18,8 +18,8 @@ android {
         applicationId = "com.dynamicisland.dilink"
         minSdk = 24
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.4.0"
+        versionCode = 6
+        versionName = "1.5.0"
     }
 
     signingConfigs {
@@ -84,7 +84,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-service:2.8.7")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
-    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")

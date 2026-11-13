@@ -17,9 +17,11 @@
     <string name="status_connected">Подключено к %1$s</string>
     <string name="status_paired_none">Телефон не сопряжён</string>
     <string name="status_paired">Компьютер: %1$s:%2$d</string>
-    <string name="pair_hint">Откройте на компьютере панель «Телефон» и отсканируйте QR-код. Ключ из кода станет постоянным — повторно сканировать не придётся.</string>
+    <string name="pair_hint">Откройте на компьютере панель «Телефон» и наведите камеру телефона на QR-код. Ключ из кода станет постоянным — повторно сканировать не придётся.</string>
 
-    <string name="action_scan">Сканировать QR на компьютере</string>
+    <string name="action_camera">Открыть камеру</string>
+    <string name="camera_unavailable">На телефоне не нашлось камеры. Скопируйте ссылку или впишите адрес с ключом ниже.</string>
+    <string name="camera_hint">Камера откроет страницу сопряжения в браузере, а та запустит DI Link.</string>
     <string name="section_manual">Подключение без QR</string>
     <string name="manual_hint">Камера телефона не всегда открывает приложение по QR-коду: иногда она лишь распознаёт ссылку. Тогда скопируйте её и вставьте сюда — или впишите адрес и ключ вручную.</string>
     <string name="manual_link_hint">Ссылка: dilink://v1?ip=…&amp;port=…&amp;token=… или 192.168.1.4:19532</string>
@@ -83,5 +85,5 @@
     <string name="share_title">Отправить на компьютер?</string>
     <string name="share_sending">Отправка…</string>
     <string name="share_no_link">Нет связи с компьютером</string>
-    <string name="version_line">DI Link %1$s · Dynamic Island 1.3</string>
+    <string name="version_line">DI Link %1$s · Dynamic Island 1.6</string>
 </resources>

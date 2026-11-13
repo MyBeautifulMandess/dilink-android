@@ -42,7 +42,14 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="14dp"
-                    android:text="@string/action_scan" />
+                    android:text="@string/action_camera" />
+
+                <TextView
+                    style="@style/Text_DiLink_Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/camera_hint" />
 
                 <TextView
                     style="@style/Text_DiLink_Section"

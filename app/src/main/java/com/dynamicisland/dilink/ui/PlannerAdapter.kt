@@ -1,8 +1,10 @@
 package com.dynamicisland.dilink.ui
 
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.RecyclerView
 import com.dynamicisland.dilink.R
 import com.dynamicisland.dilink.databinding.ItemPlannerBinding
@@ -18,7 +20,6 @@ class PlannerAdapter(
 ) : RecyclerView.Adapter<PlannerAdapter.Holder>() {
 
     private val items = ArrayList<PlannerRecord>()
-    private val format = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
 
     fun submit(list: List<PlannerRecord>) {
         items.clear()
@@ -41,15 +42,18 @@ class PlannerAdapter(
             if (checked != item.done) onDone(item, checked)
         }
         holder.binding.remove.setOnClickListener { onRemove(item) }
-        // Удалённые записи остаются в хранилище надгробием, но в списке их нет.
+        // Выполненная запись приглушается, но остаётся читаемой.
         holder.binding.root.alpha = if (item.done) 0.55f else 1f
     }
 
     class Holder(val binding: ItemPlannerBinding) : RecyclerView.ViewHolder(binding.root) {
-        private val format = SimpleDateFormat("dd MMM, HH:mm", Locale.getDefault())
+
+        private val dateFormat = SimpleDateFormat("dd MMM", Locale.getDefault())
+        private val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
 
         fun bind(item: PlannerRecord) {
-            binding.kind.text = binding.root.context.getString(
+            val context = binding.root.context
+            binding.kind.text = context.getString(
                 if (item.isEvent) R.string.planner_kind_event else R.string.planner_kind_reminder
             )
             binding.title.text = item.title
@@ -58,7 +62,21 @@ class PlannerAdapter(
             } else {
                 binding.title.paintFlags and android.graphics.Paint.STRIKE_THRU_TEXT_FLAG.inv()
             }
-            binding.whenTime.text = format.format(Date(item.anchor))
+            binding.whenTime.text = whenTime(item)
+            binding.icon.setImageResource(if (item.isEvent) R.drawable.ic_event else R.drawable.ic_bell)
+            binding.icon.imageTintList = ColorStateList.valueOf(
+                ContextCompat.getColor(context, R.color.accent)
+            )
+        }
+
+        /** У события — диапазон времени, у напоминания — дата и срок. */
+        private fun whenTime(item: PlannerRecord): String {
+            if (!item.isEvent) {
+                return "${dateFormat.format(Date(item.due))} · ${timeFormat.format(Date(item.due))}"
+            }
+            val start = timeFormat.format(Date(item.start))
+            if (item.end <= item.start) return start
+            return "$start – ${timeFormat.format(Date(item.end))}"
         }
     }
 }

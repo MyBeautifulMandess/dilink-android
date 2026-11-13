@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import com.dynamicisland.dilink.planner.PlannerRecord
 import com.dynamicisland.dilink.planner.PlannerRepository
 
 /**
@@ -29,9 +30,9 @@ object ReminderScheduler {
         manager.cancel(pending)
 
         val store = PlannerRepository.current() ?: return
-        val next = store.pendingReminders()
-            .firstOrNull { it.due > System.currentTimeMillis() - GRACE }
-            ?: return
+        val next = nextDue(store.pendingReminders(), System.currentTimeMillis()) { id, due ->
+            NotifiedStore.isNotified(context, id, due)
+        } ?: return
         val trigger = maxOf(next.due, System.currentTimeMillis() + 1_000)
         val intent = pendingIntent(context, next.id)
         try {
@@ -66,7 +67,22 @@ object ReminderScheduler {
     }
 
     /** Допуск: напоминание, срок которого прошёл минуту назад, всё равно покажем. */
-    private const val GRACE = 60_000L
+    internal const val GRACE = 60_000L
+
+    /**
+     * Ближайший срок, на который ещё нужно поставить будильник.
+     *
+     * Уже показанные напоминания пропускаются: без этого тот же срок, попавший
+     * в допуск минуты, снова ставил бы будильник на «сейчас + секунда» и
+     * уведомление приходило бы десятки раз в минуту.
+     */
+    internal fun nextDue(
+        records: List<PlannerRecord>,
+        now: Long,
+        alreadyNotified: (String, Long) -> Boolean
+    ): PlannerRecord? = records
+        .filter { !alreadyNotified(it.id, it.due) }
+        .firstOrNull { it.due > now - GRACE }
 }
 
 /**

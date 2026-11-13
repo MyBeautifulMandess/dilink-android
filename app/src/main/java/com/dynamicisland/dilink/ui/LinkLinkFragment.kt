@@ -1,6 +1,9 @@
 package com.dynamicisland.dilink.ui
 
+import android.content.ActivityNotFoundException
+import android.content.Intent
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -13,13 +16,11 @@ import com.dynamicisland.dilink.link.LinkService
 import com.dynamicisland.dilink.link.LinkState
 import com.dynamicisland.dilink.link.Pairing
 import com.dynamicisland.dilink.store.Settings
-import com.journeyapps.barcodescanner.ScanContract
-import com.journeyapps.barcodescanner.ScanOptions
 import org.json.JSONObject
 
 /**
- * Экран связи: сопряжение по QR, состояние канала, последние передачи и
- * ручная отправка буфера — на случай, если буфер читается не в фоне.
+ * Экран связи: сопряжение, состояние канала, последние передачи и ручная
+ * отправка буфера — на случай, если буфер читается не в фоне.
  */
 class LinkLinkFragment : Fragment() {
 
@@ -27,11 +28,6 @@ class LinkLinkFragment : Fragment() {
     private val binding get() = _binding!!
     private lateinit var settings: Settings
     private lateinit var adapter: TransferAdapter
-
-    private val scanner = registerForActivityResult(ScanContract()) { result ->
-        val text = result.contents ?: return@registerForActivityResult
-        pair(text)
-    }
 
     private val picker = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         uris.forEach { uri ->
@@ -123,24 +119,20 @@ class LinkLinkFragment : Fragment() {
     }
 
     private fun scan() {
-        val options = ScanOptions().apply {
-            setDesiredBarcodeFormats(ScanOptions.QR_CODE)
-            setPrompt(getString(R.string.action_scan))
-            setBeepEnabled(false)
-            setOrientationLocked(false)
-            setBarcodeImageEnabled(false)
+        // Камеру телефона зовём системную: свой сканер внутри приложения давал
+        // две проблемы — лишние килбайты в APK и вечное разрешение на камеру.
+        // Обычная камера сама узнаёт QR-код и открывает страницу сопряжения.
+        val camera = Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA)
+        val capture = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+        for (intent in listOf(camera, capture)) {
+            try {
+                startActivity(intent)
+                return
+            } catch (e: ActivityNotFoundException) {
+                // На этом телефоне нет такого приложения — пробуем следующий вариант.
+            }
         }
-        scanner.launch(options)
-    }
-
-    /** Ключ из QR становится постоянным: сервер сохраняет его как ключ устройства. */
-    private fun pair(raw: String) {
-        val pairing = Pairing.parse(raw)
-        if (pairing == null) {
-            showError("Это не код DI Link")
-            return
-        }
-        applyPairing(pairing)
+        showError(getString(R.string.camera_unavailable))
     }
 
     /**

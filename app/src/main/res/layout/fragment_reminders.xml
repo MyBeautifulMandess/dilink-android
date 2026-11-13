@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical">
@@ -10,16 +11,31 @@
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingStart="16dp"
-        android:paddingTop="8dp"
-        android:paddingEnd="12dp">
+        android:paddingTop="6dp"
+        android:paddingEnd="16dp">
+
+        <FrameLayout
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:background="@drawable/badge_icon">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_bell"
+                app:tint="@color/accent" />
+        </FrameLayout>
 
         <TextView
-            android:id="@+id/remindersStatus"
-            style="@style/Text_DiLink_Caption"
+            style="@style/Text_DiLink_Title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
             android:layout_weight="1"
-            android:text="@string/planner_local_only" />
+            android:text="@string/tab_reminders"
+            android:textSize="18sp" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/addReminder"
@@ -27,35 +43,69 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="0dp"
-            android:text="@string/action_add_reminder" />
+            android:text="@string/action_add_reminder"
+            app:icon="@drawable/ic_add"
+            app:iconSize="18dp" />
     </LinearLayout>
+
+    <TextView
+        android:id="@+id/remindersStatus"
+        style="@style/Text_DiLink_Caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingTop="4dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="6dp"
+        android:text="@string/planner_local_only" />
 
     <TextView
         android:id="@+id/reminderNotice"
         style="@style/Text_DiLink_Body"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:paddingStart="16dp"
-        android:paddingTop="2dp"
-        android:paddingEnd="16dp"
+        android:background="@drawable/card_empty"
+        android:padding="12dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="6dp"
         android:text="@string/reminder_alarm_hint"
         android:visibility="gone" />
 
-    <TextView
+    <LinearLayout
         android:id="@+id/remindersEmpty"
-        style="@style/Text_DiLink_Body"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:padding="20dp"
-        android:text="@string/reminder_empty"
-        android:visibility="gone" />
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="12dp"
+        android:background="@drawable/card_empty"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <ImageView
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_bell"
+            app:tint="@color/text_secondary" />
+
+        <TextView
+            style="@style/Text_DiLink_Body"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="@string/reminder_empty" />
+    </LinearLayout>
 
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/reminderList"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:layout_marginTop="4dp"
         android:clipToPadding="false"
         android:paddingStart="16dp"
         android:paddingEnd="16dp"

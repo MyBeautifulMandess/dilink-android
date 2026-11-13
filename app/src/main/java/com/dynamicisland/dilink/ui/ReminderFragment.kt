@@ -16,6 +16,7 @@ import com.dynamicisland.dilink.databinding.FragmentRemindersBinding
 import com.dynamicisland.dilink.link.LinkService
 import com.dynamicisland.dilink.planner.PlannerRecord
 import com.dynamicisland.dilink.planner.PlannerRepository
+import com.dynamicisland.dilink.reminder.NotifiedStore
 import com.dynamicisland.dilink.reminder.ReminderNotifier
 import com.dynamicisland.dilink.reminder.ReminderReconciler
 import java.text.SimpleDateFormat
@@ -88,6 +89,8 @@ class ReminderFragment : Fragment() {
     private fun markDone(record: PlannerRecord, done: Boolean) {
         val saved = store().setDone(record.id, done) ?: return
         LinkService.instance?.pushPlanner(saved)
+        // Снятие отметки «выполнено» снова вооружает напоминание.
+        NotifiedStore.clear(requireContext(), record.id)
         if (done) ReminderNotifier.dismiss(requireContext(), record.id)
         ReminderReconciler.sync(requireContext())
         render()
@@ -96,6 +99,7 @@ class ReminderFragment : Fragment() {
     private fun remove(record: PlannerRecord) {
         val grave = store().delete(record.id) ?: return
         LinkService.instance?.pushPlanner(grave)
+        NotifiedStore.clear(requireContext(), record.id)
         ReminderNotifier.dismiss(requireContext(), record.id)
         ReminderReconciler.sync(requireContext())
         render()

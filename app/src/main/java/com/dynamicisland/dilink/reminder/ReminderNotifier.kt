@@ -23,6 +23,9 @@ object ReminderNotifier {
     private const val CHANNEL = "di_link_reminders"
 
     fun show(context: Context, record: com.dynamicisland.dilink.planner.PlannerRecord) {
+        // Повторное срабатывание того же срока уведомление не дублирует.
+        if (NotifiedStore.isNotified(context, record.id, record.due)) return
+        NotifiedStore.markNotified(context, record.id, record.due)
         ensureChannel(context)
         val open = PendingIntent.getActivity(
             context,
@@ -104,6 +107,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
         when (intent.action) {
             ReminderNotifier.ACTION_DONE -> {
                 store.setDone(id, true)?.let { LinkService.instance?.pushPlanner(it) }
+                NotifiedStore.clear(context, id)
                 ReminderNotifier.dismiss(context, id)
             }
             ReminderNotifier.ACTION_SNOOZE -> {
@@ -115,6 +119,7 @@ class ReminderActionReceiver : BroadcastReceiver() {
                     )
                 )
                 LinkService.instance?.pushPlanner(moved)
+                NotifiedStore.clear(context, id)
                 ReminderNotifier.dismiss(context, id)
             }
         }

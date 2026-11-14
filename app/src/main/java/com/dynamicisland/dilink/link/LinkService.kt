@@ -76,6 +76,7 @@ class LinkService : Service() {
     private var clipboard: ClipboardMonitor? = null
     private var media: MediaBridge? = null
     private var wakeLock: PowerManager.WakeLock? = null
+    private var wifiLock: android.net.wifi.WifiManager.WifiLock? = null
     private val transferList = LinkedHashMap<String, FileTransfer.Progress>()
     private val handler = Handler(Looper.getMainLooper())
 
@@ -96,6 +97,19 @@ class LinkService : Service() {
             .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "di-link:socket")
             .apply { setReferenceCounted(false) }
 
+        // Wi-Fi-сокет иначе засыпает вместе с экраном, и компьютер видит обрыв:
+        // в журнале это «не отвечает, соединение закрыто» каждые 45 секунд.
+        // Замена WifiLock в API 34 не появилась, поэтому берём прежний режим.
+        @Suppress("DEPRECATION")
+        val highPerf = android.net.wifi.WifiManager.WIFI_MODE_FULL_HIGH_PERF
+        wifiLock = try {
+            (applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager)
+                .createWifiLock(highPerf, "di-link:wifi")
+                .apply { setReferenceCounted(false) }
+        } catch (e: Exception) {
+            null
+        }
+
         clipboard = ClipboardMonitor(this).apply {
             onLocal = { text -> send("clipboard.push", JSONObject().apply { put("text", text.take(20_000)); put("origin", "phone") }) }
         }
@@ -108,8 +122,9 @@ class LinkService : Service() {
     }
 
     /**
-     * Безопасность: канал не должен висеть вечно. Если с компьютером нет
-     * обмена дольше настроенного времени, соединение рвётся и сокет закрывается.
+     * Постоянный Bluetooth: канал держится, пока устройства на связи. Канал
+     * рвётся только при физической потере связи (Bluetooth выключен, устройства
+     * разъехались), а не по простою. Wi-Fi при этом остаётся запасным путём.
      */
     private fun scheduleIdleCheck() {
         handler.removeCallbacks(idleCheck)
@@ -118,7 +133,11 @@ class LinkService : Service() {
 
     private val idleCheck = object : Runnable {
         override fun run() {
-            if (!settings.idleDisconnect) {
+            // Автозакрытие по времени касается только сети. Пока жив Bluetooth,
+            // простой канал не рвёт: сокет сам сообщит об обрыве, когда
+            // устройства потеряют связь.
+            val bluetoothAlive = client?.connectedChannels?.contains("Bluetooth") == true
+            if (!settings.idleDisconnect || bluetoothAlive) {
                 handler.postDelayed(this, IDLE_TICK_MS)
                 return
             }
@@ -162,14 +181,14 @@ class LinkService : Service() {
         super.onDestroy()
     }
 
-    /** Сохранённое сопряжение: адрес, порт и ключ устройства. */
+    /** Сохранённое сопряжение: адрес, порт, Bluetooth-адрес и ключ устройства. */
     private fun connect() {
         val token = settings.deviceToken
-        if (token.isEmpty() || settings.address.isEmpty()) {
+        if (token.isEmpty() || !settings.hasTransport) {
             statusText.set("Устройство не сопряжено")
             return
         }
-        val target = Pairing(settings.address, settings.port, token)
+        val target = Pairing(settings.address, settings.port, token, settings.bluetoothAddress)
         val old = client
         old?.disconnect()
         val link = LinkClient(object : LinkClient.Callbacks {
@@ -177,12 +196,14 @@ class LinkService : Service() {
                 Companion.state.set(state)
                 when (state) {
                     LinkState.CONNECTED -> {
-                        statusText.set("Подключено к ${target.display}")
-                        notifyBar("Подключено", target.display)
+                        val how = client?.activeTransport?.ifEmpty { "канал" } ?: "канал"
+                        statusText.set("Подключено к ${target.display} · $how")
+                        notifyBar("Подключено", "${target.display} · $how")
                     }
                     LinkState.CONNECTING -> {
-                        statusText.set("Подключение…")
-                        notifyBar("Подключение…", target.display)
+                        val how = client?.activeTransport?.ifEmpty { "канал" } ?: "канал"
+                        statusText.set("Подключение… · $how")
+                        notifyBar("Подключение…", "${target.display} · $how")
                     }
                     LinkState.REJECTED -> {
                         statusText.set("Ключ не принят — сопрягите заново")
@@ -201,10 +222,14 @@ class LinkService : Service() {
                 files?.onBinary(payload)
             }
 
-            override fun onAuthOk(deviceId: String, name: String) {
+            override fun onAuthOk(deviceId: String, name: String, token: String, transport: String) {
                 if (deviceId.isNotEmpty()) settings.deviceId = deviceId
+                // Постоянный ключ устройства: следующий вход идёт с ним, а не с
+                // одноразовым кодом из QR — иначе компьютер завёл бы вторую копию.
+                if (token.isNotEmpty() && token != settings.deviceToken) settings.deviceToken = token
+                if (transport.isNotEmpty()) settings.lastTransport = transport
                 serverName.set(name)
-                statusText.set("Подключено к ${target.display}")
+                statusText.set("Подключено к ${target.display} · ${transport.ifEmpty { "канал" }}")
                 lastActivity = System.currentTimeMillis()
                 // Полный снимок планера: всё, что накопилось без связи, уходит разом.
                 if (settings.plannerSync) {
@@ -217,7 +242,8 @@ class LinkService : Service() {
                 statusText.set(reason.ifEmpty { "Ключ не принят" })
                 settings.forget()
             }
-        })
+        }, this)
+        link.preferredTransport = if (settings.preferBluetooth) Transports.BLUETOOTH else Transports.AUTO
         client = link
 
         files = FileTransfer(link, contentResolver, { downloadsFolder() }, GallerySaver(this)).apply {
@@ -229,7 +255,18 @@ class LinkService : Service() {
             onFailed = { message -> lastError.set(message) }
         }
 
-        wakeLock?.acquire(10 * 60 * 1000L)
+        // Без удержания процессор засыпает вместе с экраном, сокеты перестают
+        // отвечать на ping, и компьютер закрывает канал. Раньше блокировка
+        // бралась на 10 минут и молча истекала — связь «терялась» сама собой.
+        // Держим её до отключения и снимаем в disconnect().
+        wakeLock?.acquire()
+        // Держим радио в бодрствовании, пока канал нужен: иначе Wi-Fi засыпает
+        // вместе с экраном и связь «пропадает» сама по себе.
+        try {
+            if (wifiLock?.isHeld == false) wifiLock?.acquire()
+        } catch (e: Exception) {
+            // Без разрешения на Wi-Fi остаётся Bluetooth и обычный сокет.
+        }
         link.connect(target, token)
     }
 
@@ -242,6 +279,7 @@ class LinkService : Service() {
         Companion.state.set(LinkState.DISCONNECTED)
         statusText.set("Не подключено")
         wakeLock?.let { if (it.isHeld) it.release() }
+        try { if (wifiLock?.isHeld == true) wifiLock?.release() } catch (e: Exception) { }
         stopForegroundCompat()
     }
 

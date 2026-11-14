@@ -21,6 +21,19 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_PORT, DEFAULT_PORT)
         set(value) = prefs.edit().putInt(KEY_PORT, value).apply()
 
+    /** MAC Bluetooth-адаптера компьютера из QR-кода. Пусто — канал только по сети. */
+    var bluetoothAddress: String
+        get() = prefs.getString(KEY_BLUETOOTH, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_BLUETOOTH, value).apply()
+
+    /**
+     * Предпочитать Bluetooth. По сети быстрее, поэтому Bluetooth включают,
+     * когда компьютер и телефон не в одной сети.
+     */
+    var preferBluetooth: Boolean
+        get() = prefs.getBoolean(KEY_PREFER_BLUETOOTH, false)
+        set(value) = prefs.edit().putBoolean(KEY_PREFER_BLUETOOTH, value).apply()
+
     var clipboardSync: Boolean
         get() = prefs.getBoolean(KEY_CLIPBOARD, true)
         set(value) = prefs.edit().putBoolean(KEY_CLIPBOARD, value).apply()
@@ -73,9 +86,14 @@ class Settings(context: Context) {
         get() = prefs.getString(KEY_DEVICE_ID, "") ?: ""
         set(value) = prefs.edit().putString(KEY_DEVICE_ID, value).apply()
 
+    /** Транспорт последней сессии — для строки состояния. */
+    var lastTransport: String
+        get() = prefs.getString(KEY_LAST_TRANSPORT, "") ?: ""
+        set(value) = prefs.edit().putString(KEY_LAST_TRANSPORT, value).apply()
+
     /** Рвать канал, если компьютер не отвечает или телефон не нужен дольше N минут. */
     var idleDisconnect: Boolean
-        get() = prefs.getBoolean(KEY_IDLE, true)
+        get() = prefs.getBoolean(KEY_IDLE, false)
         set(value) = prefs.edit().putBoolean(KEY_IDLE, value).apply()
 
     /** Сколько минут держать канал без активности. 1–240. */
@@ -83,12 +101,16 @@ class Settings(context: Context) {
         get() = prefs.getInt(KEY_IDLE_MIN, 15).coerceIn(1, 240)
         set(value) = prefs.edit().putInt(KEY_IDLE_MIN, value.coerceIn(1, 240)).apply()
 
-    val isPaired: Boolean get() = address.isNotEmpty() && deviceToken.isNotEmpty()
+    val isPaired: Boolean get() = (address.isNotEmpty() || bluetoothAddress.isNotEmpty()) && deviceToken.isNotEmpty()
+
+    /** Есть чем соединиться: сеть или Bluetooth-адрес компьютера. */
+    val hasTransport: Boolean get() = address.isNotEmpty() || bluetoothAddress.isNotEmpty()
 
     fun forget() {
         prefs.edit()
             .remove(KEY_ADDRESS)
             .remove(KEY_PORT)
+            .remove(KEY_BLUETOOTH)
             .remove(KEY_TOKEN)
             .remove(KEY_DEVICE_ID)
             .apply()
@@ -98,6 +120,8 @@ class Settings(context: Context) {
         const val DEFAULT_PORT = 19532
         const val KEY_ADDRESS = "address"
         const val KEY_PORT = "port"
+        const val KEY_BLUETOOTH = "bluetooth_address"
+        const val KEY_PREFER_BLUETOOTH = "prefer_bluetooth"
         const val KEY_CLIPBOARD = "clipboard"
         const val KEY_NOTIFICATIONS = "notifications"
         const val KEY_MEDIA = "media"
@@ -108,6 +132,7 @@ class Settings(context: Context) {
         const val KEY_AUTO = "auto_connect"
         const val KEY_TOKEN = "token"
         const val KEY_DEVICE_ID = "device_id"
+        const val KEY_LAST_TRANSPORT = "last_transport"
         const val KEY_IDLE = "idle_disconnect"
         const val KEY_IDLE_MIN = "idle_minutes"
     }

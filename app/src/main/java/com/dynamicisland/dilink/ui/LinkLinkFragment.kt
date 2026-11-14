@@ -15,6 +15,7 @@ import androidx.fragment.app.Fragment
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.dynamicisland.dilink.R
 import com.dynamicisland.dilink.databinding.FragmentLinkBinding
+import com.dynamicisland.dilink.link.BluetoothPairing
 import com.dynamicisland.dilink.link.FileTransfer
 import com.dynamicisland.dilink.link.LinkService
 import com.dynamicisland.dilink.link.LinkState
@@ -45,6 +46,11 @@ class LinkLinkFragment : Fragment() {
         }
     }
 
+    private val bluetoothPermissions =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+            if (granted.values.all { it }) startSearch() else showError(getString(R.string.bluetooth_permission_needed))
+        }
+
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, saved: Bundle?): View {
         _binding = FragmentLinkBinding.inflate(inflater, container, false)
         return binding.root
@@ -61,10 +67,15 @@ class LinkLinkFragment : Fragment() {
         binding.transfers.adapter = adapter
 
         binding.scan.setOnClickListener { scan() }
+        binding.findComputer.setOnClickListener { findComputer() }
         binding.paste.setOnClickListener { pasteFromClipboard() }
         binding.manualConnect.setOnClickListener { pairManual() }
         binding.connect.setOnClickListener {
             if (settings.isPaired) LinkService.instance?.reconnect() else scan()
+        }
+        binding.preferBluetooth.setOnCheckedChangeListener { _, value ->
+            settings.preferBluetooth = value
+            LinkService.instance?.reconnect()
         }
         binding.forget.setOnClickListener {
             settings.forget()
@@ -87,6 +98,9 @@ class LinkLinkFragment : Fragment() {
         }
 
         LinkService.state.observe { render() }
+        LinkService.statusText.observe { text ->
+            _binding?.linkState?.text = text.ifEmpty { getString(R.string.status_disconnected) }
+        }
         LinkService.lastError.observe { message ->
             if (message.isNotEmpty()) showError(message)
         }
@@ -106,9 +120,19 @@ class LinkLinkFragment : Fragment() {
         val paired = settings.isPaired
         val state = LinkService.state.get()
         binding.pairTitle.text = if (paired) {
-            getString(R.string.status_paired, settings.address, settings.port)
+            if (settings.address.isEmpty()) {
+                getString(R.string.status_paired_bluetooth, settings.bluetoothAddress)
+            } else {
+                getString(R.string.status_paired, settings.address, settings.port)
+            }
         } else {
             getString(R.string.status_paired_none)
+        }
+        val canBluetooth = settings.bluetoothAddress.isNotEmpty()
+        binding.preferBluetooth.isEnabled = canBluetooth
+        binding.preferBluetooth.alpha = if (canBluetooth) 1f else 0.5f
+        if (binding.preferBluetooth.isChecked != settings.preferBluetooth) {
+            binding.preferBluetooth.isChecked = settings.preferBluetooth
         }
         binding.connect.isEnabled = paired
         binding.forget.isEnabled = paired
@@ -124,6 +148,84 @@ class LinkLinkFragment : Fragment() {
                 if (paired) LinkService.instance?.reconnect() else scan()
             }
         }
+    }
+
+    /**
+     * Знакомство без камеры и без общей сети: телефон ищет компьютер рядом и
+     * сам просит у него ключ. Компьютер спрашивает разрешение — так же, как
+     * устроены Quick Share и связь с телефоном у Windows.
+     */
+    private fun findComputer() {
+        val pairing = BluetoothPairing(requireContext())
+        if (!pairing.isBluetoothOn()) {
+            showError(getString(R.string.bluetooth_off))
+            return
+        }
+        if (!pairing.hasPermissions()) {
+            bluetoothPermissions.launch(pairing.requiredPermissions())
+            return
+        }
+        startSearch()
+    }
+
+    private fun startSearch() {
+        val pairing = BluetoothPairing(requireContext())
+        showError(getString(R.string.bluetooth_searching))
+        Thread {
+            val devices = pairing.findDevices()
+            activity?.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                if (devices.isEmpty()) {
+                    showError(getString(R.string.bluetooth_none_found))
+                    return@runOnUiThread
+                }
+                showDeviceList(devices)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    private fun showDeviceList(devices: List<BluetoothPairing.Device>) {
+        val labels = devices.map { device ->
+            val mark = if (device.bonded) " · " + getString(R.string.bluetooth_device_bonded) else ""
+            "${device.name}$mark\n${device.address}"
+        }.toTypedArray()
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.bluetooth_device_title)
+            .setItems(labels) { _, which -> requestOffer(devices[which]) }
+            .setNegativeButton(R.string.action_cancel, null)
+            .show()
+    }
+
+    /** Рукопожатие с компьютером: он присылает одноразовый ключ. */
+    private fun requestOffer(device: BluetoothPairing.Device) {
+        showError(getString(R.string.bluetooth_searching))
+        val pairing = BluetoothPairing(requireContext())
+        Thread {
+            val offer = pairing.requestOffer(device.address)
+            activity?.runOnUiThread {
+                if (!isAdded) return@runOnUiThread
+                if (offer == null) {
+                    showError(getString(R.string.bluetooth_pairing_failed, pairing.lastError))
+                    return@runOnUiThread
+                }
+                confirmPairing(device, offer)
+            }
+        }.apply { isDaemon = true }.start()
+    }
+
+    private fun confirmPairing(device: BluetoothPairing.Device, offer: BluetoothPairing.Offer) {
+        val name = offer.computerName.ifEmpty { device.name }
+        val shortKey = offer.pairing.token.take(10) + "…"
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.pair_confirm_title)
+            .setMessage(getString(R.string.pair_confirm_message, name, shortKey))
+            .setPositiveButton(R.string.action_grant) { _, _ ->
+                // Сопряжение по Bluetooth не отменяет сеть: если компьютер дал
+                // адрес, оба канала поднимутся сами.
+                applyPairing(offer.pairing)
+            }
+            .setNegativeButton(R.string.action_cancel, null)
+            .show()
     }
 
     private fun scan() {
@@ -200,6 +302,7 @@ class LinkLinkFragment : Fragment() {
         settings.port = pairing.port
         settings.deviceToken = pairing.token
         settings.deviceId = ""
+        if (pairing.hasBluetooth) settings.bluetoothAddress = pairing.bluetoothAddress
         binding.error.visibility = View.GONE
         LinkService.instance?.reconnect() ?: LinkService.start(requireContext())
         render()

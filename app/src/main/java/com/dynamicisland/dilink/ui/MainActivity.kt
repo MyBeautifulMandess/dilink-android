@@ -60,6 +60,7 @@ class MainActivity : AppCompatActivity() {
         handlePairingLink(intent)
 
         requestNotificationPermission()
+        requestBluetoothPermission()
         if (LinkApp.hasNotificationAccess(this).not()) {
             // Первый запуск: без доступа не будет ни уведомлений, ни медиаплеера.
             // Просим один раз молча, экран настроек всё равно объяснит подробнее.
@@ -93,6 +94,19 @@ class MainActivity : AppCompatActivity() {
             PackageManager.PERMISSION_GRANTED
         ) return
         requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), REQUEST_NOTIFICATIONS)
+    }
+
+    /**
+     * Bluetooth-канал требует BLUETOOTH_CONNECT на Android 12+. Просим сразу:
+     * без разрешения запасной транспорт просто не поднимется, а пользователь
+     * решит, что связь без Wi-Fi не работает.
+     */
+    private fun requestBluetoothPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.BLUETOOTH_CONNECT) ==
+            PackageManager.PERMISSION_GRANTED
+        ) return
+        requestPermissions(arrayOf(Manifest.permission.BLUETOOTH_CONNECT), REQUEST_BLUETOOTH)
     }
 
     override fun onResume() {
@@ -133,5 +147,6 @@ class MainActivity : AppCompatActivity() {
         /** С какой вкладки открыться: из уведомления напоминания сразу в список. */
         const val EXTRA_OPEN_TAB = "open_tab"
         private const val REQUEST_NOTIFICATIONS = 11
+        private const val REQUEST_BLUETOOTH = 12
     }
 }

@@ -82,8 +82,8 @@ class LiveLinkHarness {
 
             override fun onBinary(payload: ByteArray) = transfer.onBinary(payload)
 
-            override fun onAuthOk(deviceId: String, name: String) {
-                println("AUTH_OK device=$deviceId name=$name")
+            override fun onAuthOk(deviceId: String, name: String, token: String, transport: String) {
+                println("AUTH_OK device=$deviceId name=$name transport=$transport token=${token.length}")
                 authorized.countDown()
             }
 

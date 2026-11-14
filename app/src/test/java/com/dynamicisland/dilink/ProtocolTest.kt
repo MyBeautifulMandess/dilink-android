@@ -97,6 +97,23 @@ class ProtocolTest {
     }
 
     @Test
+    fun pairingCarriesBluetoothAddress() {
+        val qr = "dilink://v1?ip=192.168.1.68&port=19532&token=abc123&bta=DC:45:46:A3:82:97"
+        val pairing = Pairing.parse(qr)
+        assertNotNull(pairing)
+        assertEquals("DC:45:46:A3:82:97", pairing!!.bluetoothAddress)
+        assertTrue(pairing.hasBluetooth)
+
+        // Адрес без разделителей и в нижнем регистре приводится к одному виду.
+        assertEquals("DC:45:46:A3:82:97", Pairing.normalizeMac("dc4546a38297"))
+        assertEquals("", Pairing.normalizeMac("не адрес"))
+
+        val rebuilt = Pairing.build("192.168.1.68", 19532, "abc123", "DC:45:46:A3:82:97")
+        val again = Pairing.parse(rebuilt)
+        assertEquals("DC:45:46:A3:82:97", again?.bluetoothAddress)
+    }
+
+    @Test
     fun junkIsNotAPairingCode() {
         assertEquals(null, Pairing.parse("https://example.com"))
         assertEquals(null, Pairing.parse("dilink://v1?ip=1.2.3.4"))
@@ -161,7 +178,7 @@ class ProtocolTest {
             override fun onState(state: LinkState, detail: String) = Unit
             override fun onEnvelope(envelope: Envelope) = Unit
             override fun onBinary(payload: ByteArray) = Unit
-            override fun onAuthOk(deviceId: String, name: String) {
+            override fun onAuthOk(deviceId: String, name: String, token: String, transport: String) {
                 authorized.countDown()
             }
             override fun onRejected(reason: String) = Unit
@@ -191,7 +208,8 @@ class ProtocolTest {
             override fun onState(state: LinkState, detail: String) = Unit
             override fun onEnvelope(envelope: Envelope) = Unit
             override fun onBinary(payload: ByteArray) = Unit
-            override fun onAuthOk(deviceId: String, name: String) = authorized.countDown()
+            override fun onAuthOk(deviceId: String, name: String, token: String, transport: String) =
+                authorized.countDown()
             override fun onRejected(reason: String) = Unit
         })
         client.connect(Pairing(server.hostName, server.port, "token-2"), "token-2")

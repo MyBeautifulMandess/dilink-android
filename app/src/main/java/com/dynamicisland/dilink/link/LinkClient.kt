@@ -1,15 +1,10 @@
 package com.dynamicisland.dilink.link
 
-import android.os.Build
+import android.content.Context
 import okhttp3.OkHttpClient
-import okhttp3.Request
-import okhttp3.Response
-import okhttp3.WebSocket
-import okhttp3.WebSocketListener
-import okio.ByteString
-import okio.ByteString.Companion.toByteString
 import org.json.JSONObject
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.min
@@ -18,21 +13,48 @@ import kotlin.math.min
 enum class LinkState { DISCONNECTED, CONNECTING, CONNECTED, REJECTED }
 
 /**
- * Клиент канала до островка. Отвечает за рукопожатие, авторизацию ключом
- * устройства, переподключение с нарастающей паузой и отправку кадров.
+ * Клиент канала до островка. Отвечает за авторизацию ключом устройства,
+ * переподключение с нарастающей паузой и очередь кадров.
  *
- * Класс намеренно не знает про Android UI: колбэки вызываются на фоновом
- * потоке, а подписчики сами решают, как перейти в главный.
+ * Транспорты не заменяют друг друга, а работают параллельно: Wi-Fi и Bluetooth
+ * поднимаются одновременно, у каждого свой цикл переподключения. Пока жив хотя
+ * бы один, связь с компьютером есть, и обрыв второго её не рвёт — раньше клиент
+ * держал один транспорт и при появлении второго закрывал первый, из-за чего
+ * связь «мигала» (подключался Bluetooth, отваливался Wi-Fi, и наоборот).
+ *
+ * Отправка идёт по одному каналу — лучшему живому, поэтому компьютер не
+ * получает кадр дважды. Колбэки вызываются на фоновом потоке, подписчики сами
+ * решают, как перейти в главный.
  */
 class LinkClient(
-    private val callbacks: Callbacks
+    private val callbacks: Callbacks,
+    /** Bluetooth-транспорт создаётся лениво: без контекста его не собрать. */
+    private val context: Context? = null
 ) {
     interface Callbacks {
         fun onState(state: LinkState, detail: String)
         fun onEnvelope(envelope: Envelope)
         fun onBinary(payload: ByteArray)
-        fun onAuthOk(deviceId: String, name: String)
+        fun onAuthOk(deviceId: String, name: String, token: String, transport: String)
         fun onRejected(reason: String)
+    }
+
+    /**
+     * Один транспорт и его собственный цикл переподключения. Каналы друг о
+     * друге не знают: обрыв одного не трогает второй.
+     */
+    private inner class Channel(val transport: LinkTransport) {
+        @Volatile var authorized = false
+
+        /** Закрытие уже обработано: не даёт колбэку закрытия зациклиться. */
+        @Volatile var closing = false
+
+        /** Номер попытки: колбэки от прошлой попытки игнорируются. */
+        @Volatile var generation = 0
+        @Volatile var attempt = 0
+        @Volatile var retry: Thread? = null
+
+        val name: String get() = transport.name
     }
 
     private val http = OkHttpClient.Builder()
@@ -45,43 +67,69 @@ class LinkClient(
 
     private val queue = ConcurrentLinkedQueue<String>()
     private val running = AtomicBoolean(false)
-    private val authorized = AtomicBoolean(false)
 
-    @Volatile private var socket: WebSocket? = null
+    /** Первый вход после подключения: полный снимок уходит один раз, а не на каждый канал. */
+    private val authReported = AtomicBoolean(false)
+
+    private val channels = CopyOnWriteArrayList<Channel>()
+
     @Volatile private var pairing: Pairing? = null
     @Volatile private var token: String = ""
-    @Volatile private var attempt = 0
+
+    /** Предпочтительный транспорт для отправки. Оба канала при этом остаются живыми. */
+    @Volatile var preferredTransport: Transports = Transports.AUTO
+
+    /** Живые каналы: «Wi-Fi», «Bluetooth» или «Wi-Fi + Bluetooth». */
+    val activeTransport: String get() = connectedChannels.joinToString(" + ")
+
+    val connectedChannels: List<String>
+        get() = channels.filter { it.authorized }.map { it.name }
 
     @Volatile var state: LinkState = LinkState.DISCONNECTED
         private set
 
-    val isAuthorized: Boolean get() = authorized.get()
+    val isAuthorized: Boolean get() = channels.any { it.authorized }
 
-    val deviceLabel: String =
-        (Build.MANUFACTURER + " " + Build.MODEL).trim().ifBlank { "Android" }
+    val deviceLabel: String = DeviceIdentity.label()
 
     /**
-     * Подключение по сохранённому ключу. Токен — либо одноразовый из QR,
-     * либо уже выданный ранее ключ устройства: для сервера это одно и то же поле.
+     * Постоянный идентификатор установки. Компьютер заводит по нему одну запись
+     * устройства: повторное сопряжение по QR не создаёт вторую копию.
      */
+    val instanceId: String = context?.let { DeviceIdentity.instanceId(it) } ?: ""
+
+    /**
+     * Аппаратный идентификатор: переживает переустановку приложения, поэтому
+     * по нему компьютер сливает записи одного телефона в одну.
+     */
+    val hardwareId: String = context?.let { DeviceIdentity.hardwareId(it) } ?: ""
+
     fun connect(pairing: Pairing, deviceToken: String) {
         this.pairing = pairing
-        this.token = deviceToken
+        token = deviceToken
         running.set(true)
-        attempt = 0
-        openSocket()
+        authReported.set(false)
+        closeChannels()
+        val targets = transports(pairing)
+        if (targets.isEmpty()) {
+            publishState(LinkState.DISCONNECTED, "Нет адреса компьютера")
+            return
+        }
+        val created = targets.map { Channel(it) }
+        channels.addAll(created)
+        publishState(LinkState.CONNECTING, "${pairing.display} · ${created.joinToString(" + ") { it.name }}")
+        created.forEach { open(it) }
     }
 
     fun disconnect() {
         running.set(false)
-        authorized.set(false)
+        authReported.set(false)
         queue.clear()
-        socket?.close(1000, "bye")
-        socket = null
-        setState(LinkState.DISCONNECTED, "Отключено")
+        closeChannels()
+        publishState(LinkState.DISCONNECTED, "Отключено")
     }
 
-    /** Полное закрытие: сокет, пул соединений и потоки. Нужно при выходе из сервиса. */
+    /** Полное закрытие: сокеты, пул соединений и потоки. Нужно при выходе из сервиса. */
     fun close() {
         disconnect()
         runCatching {
@@ -90,132 +138,212 @@ class LinkClient(
         }
     }
 
-    private fun openSocket() {
-        val target = pairing ?: return
-        if (!running.get()) return
-        setState(LinkState.CONNECTING, target.display)
-        val request = Request.Builder().url(target.webSocketUrl).build()
-        socket?.cancel()
-        socket = http.newWebSocket(request, Listener())
-    }
-
-    private fun setState(next: LinkState, detail: String) {
-        state = next
-        callbacks.onState(next, detail)
-    }
-
-    fun send(type: String, payload: JSONObject = JSONObject()) {
-        val text = Protocol.build(type, payload)
-        val current = socket
-        if (current == null || !authorized.get()) {
-            // Пока канал не готов, копим самое ценное — правки и буфер. Очередь
-            // ограничена, чтобы офлайн-сессия не съела память.
-            if (queue.size < MAX_QUEUE) queue.add(text)
-            return
+    /**
+     * Каналы, которые нужно поднять. Когда известны и адрес, и Bluetooth,
+     * поднимаются оба: сеть быстрее, Bluetooth работает без общей сети и
+     * остаётся, когда телефон уходит из Wi-Fi. Массив упорядочен предпочтением
+     * для отправки, а не для подключения — подключаются все сразу.
+     */
+    private fun transports(target: Pairing): List<LinkTransport> {
+        val ctx = context
+        val bluetooth =
+            if (ctx != null && target.hasBluetooth) BluetoothTransport(ctx, target.bluetoothAddress) else null
+        val network = if (target.address.isNotEmpty()) WebSocketTransport(target, http) else null
+        return when (preferredTransport) {
+            Transports.BLUETOOTH -> listOfNotNull(bluetooth, network)
+            else -> listOfNotNull(network, bluetooth)
         }
-        if (!current.send(text)) queue.add(text)
     }
 
-    fun sendBinary(payload: ByteArray) {
-        val current = socket ?: return
-        current.send(payload.toByteString())
-    }
+    private fun open(channel: Channel) {
+        if (!running.get() || !channels.contains(channel)) return
+        val generation = ++channel.generation
+        channel.closing = false
+        // Второй канал может переподключаться, пока первый жив: не показываем
+        // «Подключение…», иначе строка состояния мигала бы на ровном месте.
+        if (!isAuthorized) publishState(LinkState.CONNECTING)
+        val listener = object : LinkTransport.Listener {
+            override fun onOpen() {
+                if (!current(channel, generation)) return
+                channel.attempt = 0
+                sendAuth(channel)
+            }
 
-    /** Отправка заголовка и бинарного тела одним пакетом — как ждёт сервер. */
-    fun sendChunk(type: String, payload: JSONObject, data: ByteArray) {
-        val current = socket ?: return
-        runCatching { current.send(Protocol.build(type, payload)) }
-        current.send(data.toByteString())
-    }
+            override fun onText(text: String) {
+                if (!current(channel, generation)) return
+                onFrame(channel, text)
+            }
 
-    private fun flushQueue() {
-        val current = socket ?: return
-        while (true) {
-            val next = queue.poll() ?: return
-            if (!current.send(next)) {
-                queue.add(next)
-                return
+            override fun onBinary(data: ByteArray) = callbacks.onBinary(data)
+
+            override fun onClosed(reason: String) {
+                if (!current(channel, generation)) return
+                onChannelClosed(channel, generation, reason)
             }
         }
+        if (!channel.transport.open(listener)) onChannelClosed(channel, generation, "транспорт недоступен")
     }
 
-    private fun authenticate() {
-        val payload = JSONObject().apply {
-            put("token", token)
-            put("name", deviceLabel)
-        }
-        socket?.send(Protocol.build("auth", payload))
-    }
+    private fun current(channel: Channel, generation: Int): Boolean =
+        running.get() && channel.generation == generation
 
-    internal inner class Listener : WebSocketListener() {
+    /**
+     * Обрыв одного канала. Переподключается только он: второй продолжает
+     * работать, поэтому связь с компьютером не пропадает.
+     */
+    private fun onChannelClosed(channel: Channel, generation: Int, reason: String) {
+        if (channel.closing) return
+        channel.closing = true
+        channel.authorized = false
+        runCatching { channel.transport.close() }
+        if (!running.get() || channel.generation != generation) return
 
-        override fun onOpen(webSocket: WebSocket, response: Response) {
-            attempt = 0
-            authenticate()
-        }
+        val delay = RECONNECT[min(channel.attempt, RECONNECT.lastIndex)]
+        channel.attempt++
+        if (!isAuthorized) publishState(LinkState.CONNECTING, reason)
 
-        override fun onMessage(webSocket: WebSocket, text: String) {
-            val envelope = Protocol.parse(text) ?: return
-            when (envelope.type) {
-                "auth.ok" -> {
-                    authorized.set(true)
-                    setState(LinkState.CONNECTED, envelope.str("server"))
-                    callbacks.onAuthOk(envelope.str("deviceId"), envelope.str("name"))
-                    flushQueue()
-                }
-                "auth.rejected" -> {
-                    authorized.set(false)
-                    running.set(false)
-                    setState(LinkState.REJECTED, envelope.str("reason"))
-                    callbacks.onRejected(envelope.str("reason"))
-                }
-                "pong" -> Unit
-                else -> callbacks.onEnvelope(envelope)
-            }
-        }
-
-        override fun onMessage(webSocket: WebSocket, bytes: ByteString) {
-            callbacks.onBinary(bytes.toByteArray())
-        }
-
-        override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-            authorized.set(false)
-            scheduleReconnect(t.message ?: "соединение прервано")
-        }
-
-        override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-            authorized.set(false)
-            if (running.get()) scheduleReconnect("закрыто: $reason") else setState(LinkState.DISCONNECTED, reason)
-        }
-    }
-
-    private fun scheduleReconnect(reason: String) {
-        if (!running.get()) {
-            setState(LinkState.DISCONNECTED, reason)
-            return
-        }
-        // Компьютер мог закрыть порт по простою: не долбим его вечно.
-        if (attempt >= MAX_ATTEMPTS) {
-            running.set(false)
-            setState(LinkState.DISCONNECTED, "Компьютер не отвечает")
-            return
-        }
-        setState(LinkState.CONNECTING, reason)
-        val delay = RECONNECT[min(attempt, RECONNECT.lastIndex)]
-        attempt++
-        Thread {
+        val retry = Thread {
             try {
                 Thread.sleep(delay)
             } catch (ignored: InterruptedException) {
                 return@Thread
             }
-            if (running.get()) openSocket()
-        }.apply { isDaemon = true }.start()
+            if (!running.get() || channel.generation != generation || !channels.contains(channel)) return@Thread
+            open(channel)
+        }.apply {
+            isDaemon = true
+            name = "di-link-retry-${channel.name}"
+        }
+        channel.retry = retry
+        retry.start()
     }
 
-    private companion object {
-        const val MAX_QUEUE = 40
-        const val MAX_ATTEMPTS = 8
-        val RECONNECT = longArrayOf(1_000, 2_000, 4_000, 8_000, 16_000, 30_000)
+    private fun publishState(next: LinkState, detail: String = "") {
+        state = next
+        val description = detail.ifEmpty { activeTransport.ifEmpty { pairing?.display ?: "" } }
+        callbacks.onState(next, description)
+    }
+
+    fun send(type: String, payload: JSONObject = JSONObject()) {
+        val text = Protocol.build(type, payload)
+        if (sendText(text)) return
+        // Пока канал не готов, копим самое ценное — правки и буфер. Очередь
+        // ограничена, чтобы офлайн-сессия не съела память.
+        if (queue.size < MAX_QUEUE) queue.add(text)
+    }
+
+    private fun sendText(text: String): Boolean {
+        for (channel in orderedChannels()) {
+            if (channel.transport.send(text)) return true
+        }
+        return false
+    }
+
+    /**
+     * Отправка заголовка и бинарного тела одной записью — как ждёт сервер.
+     * Возвращает false, если ни один канал не принял кадр: отправитель тогда
+     * не считает чанк доставленным и не уходит вперёд.
+     */
+    fun sendChunk(type: String, payload: JSONObject, data: ByteArray): Boolean {
+        val text = Protocol.build(type, payload)
+        for (channel in orderedChannels()) {
+            if (channel.transport.sendAndBinary(text, data)) return true
+        }
+        return false
+    }
+
+    /**
+     * Живые каналы, предпочтительный первым. Отправка идёт в первый живой,
+     * поэтому кадр не дублируется на второй канал.
+     */
+    private fun orderedChannels(): List<Channel> {
+        val preferred = if (preferredTransport == Transports.BLUETOOTH) "Bluetooth" else "Wi-Fi"
+        return channels.filter { it.authorized && !it.closing }.sortedBy { if (it.name == preferred) 0 else 1 }
+    }
+
+    private fun flushQueue() {
+        // Два канала могут авторизоваться почти одновременно: без блокировки
+        // одно и то же сообщение ушло бы дважды.
+        synchronized(queue) {
+            while (true) {
+                val next = queue.peek() ?: return
+                if (!sendText(next)) return
+                queue.poll()
+            }
+        }
+    }
+
+    private fun sendAuth(channel: Channel) {
+        val payload = JSONObject().apply {
+            put("token", token)
+            put("name", deviceLabel)
+            put("instance", instanceId)
+            // Аппаратный признак: по нему компьютер не заводит вторую запись,
+            // если приложение переустановили и идентификатор установки сменился.
+            if (hardwareId.isNotEmpty()) put("hwid", hardwareId)
+        }
+        channel.transport.send(Protocol.build("auth", payload))
+    }
+
+    private fun onFrame(channel: Channel, text: String) {
+        val envelope = Protocol.parse(text) ?: return
+        when (envelope.type) {
+            "auth.ok" -> {
+                channel.authorized = true
+                channel.closing = false
+                val transport = envelope.str("transport").ifEmpty { channel.name }
+                val first = authReported.compareAndSet(false, true)
+                publishState(LinkState.CONNECTED, activeTransport)
+                // Второй канал — это не новое подключение: снимок планера и
+                // запуск функций уже сделаны, ему нужно только подтверждение.
+                if (first) {
+                    callbacks.onAuthOk(
+                        envelope.str("deviceId"),
+                        envelope.str("name"),
+                        envelope.str("token"),
+                        transport
+                    )
+                }
+                flushQueue()
+            }
+            "auth.rejected" -> {
+                channel.authorized = false
+                running.set(false)
+                closeChannels()
+                publishState(LinkState.REJECTED, envelope.str("reason"))
+                callbacks.onRejected(envelope.str("reason"))
+            }
+            "pong" -> Unit
+            // Пинг подтверждается тем же каналом, по которому пришёл: иначе
+            // компьютер считал бы молчащий канал мёртвым и закрывал его.
+            "ping" -> channel.transport.send(
+                Protocol.build("pong", JSONObject().put("ts", System.currentTimeMillis() / 1000))
+            )
+            else -> callbacks.onEnvelope(envelope)
+        }
+    }
+
+    private fun closeChannels() {
+        for (channel in channels) {
+            channel.closing = true
+            channel.generation++
+            runCatching { channel.retry?.interrupt() }
+            runCatching { channel.transport.close() }
+        }
+        channels.clear()
+    }
+
+    companion object {
+        private const val MAX_QUEUE = 40
+
+        /**
+         * Паузы между попытками. Список не обрывает переподключение: пока канал
+         * не выключен человеком, телефон пробует снова и снова с самой длинной
+         * паузой. Так Bluetooth-связь живёт, пока устройства в зоне друг друга.
+         */
+        val RECONNECT = longArrayOf(1_000, 2_000, 4_000, 8_000, 15_000, 30_000)
     }
 }
+
+/** Какой транспорт предпочесть для отправки. Подключаются всегда оба. */
+enum class Transports { AUTO, WEBSOCKET, BLUETOOTH }

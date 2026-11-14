@@ -25,6 +25,82 @@
                     style="@style/Text_DiLink_Section"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
+                    android:text="@string/section_connection" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchBluetooth"
+                    style="@style/Widget_DiLink_SwitchRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/row_prefer_bluetooth" />
+
+                <TextView
+                    android:id="@+id/bluetoothHint"
+                    style="@style/Text_DiLink_Caption"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:text="@string/prefer_bluetooth_hint" />
+
+                <com.google.android.material.materialswitch.MaterialSwitch
+                    android:id="@+id/switchIdle"
+                    style="@style/Widget_DiLink_SwitchRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/row_idle" />
+
+                <LinearLayout
+                    android:id="@+id/idleRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingTop="4dp">
+
+                    <TextView
+                        style="@style/Text_DiLink_Body"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/row_idle_minutes" />
+
+                    <EditText
+                        android:id="@+id/idleMinutes"
+                        android:layout_width="72dp"
+                        android:layout_height="wrap_content"
+                        android:gravity="end"
+                        android:inputType="number"
+                        android:maxLength="3"
+                        android:autofillHints=""
+                        android:importantForAutofill="no"
+                        android:textSize="15sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/idleHint"
+                    style="@style/Text_DiLink_Body"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/idle_hint" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Text_DiLink_Section"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
                     android:text="@string/section_sync" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
@@ -63,13 +139,6 @@
                     android:text="@string/row_planner" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switchWifi"
-                    style="@style/Widget_DiLink_SwitchRow"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/row_wifi_only" />
-
-                <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/switchAuto"
                     style="@style/Widget_DiLink_SwitchRow"
                     android:layout_width="match_parent"
@@ -77,44 +146,11 @@
                     android:text="@string/row_auto" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/switchIdle"
+                    android:id="@+id/switchWifi"
                     style="@style/Widget_DiLink_SwitchRow"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/row_idle" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal"
-                    android:paddingTop="4dp">
-
-                    <TextView
-                        style="@style/Text_DiLink_Body"
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:text="@string/row_idle_minutes" />
-
-                    <EditText
-                        android:id="@+id/idleMinutes"
-                        android:layout_width="72dp"
-                        android:layout_height="wrap_content"
-                        android:gravity="end"
-                        android:inputType="number"
-                        android:maxLength="3"
-                        android:autofillHints=""
-                        android:importantForAutofill="no"
-                        android:textSize="15sp" />
-                </LinearLayout>
-
-                <TextView
-                    style="@style/Text_DiLink_Body"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/idle_hint" />
+                    android:text="@string/row_wifi_only" />
 
                 <TextView
                     style="@style/Text_DiLink_Body"

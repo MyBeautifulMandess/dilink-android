@@ -44,7 +44,9 @@ class FileTransfer(
         val target: File,
         val part: File,
         val total: Long,
-        var received: Long = 0
+        var received: Long = 0,
+        /** Сколько уже подтверждено компьютеру — чтобы не слать ack на каждый чанк. */
+        var reported: Long = 0
     )
 
     private data class Outgoing(
@@ -52,12 +54,18 @@ class FileTransfer(
         val name: String,
         val uri: Uri,
         val total: Long,
-        var started: Boolean = false
+        var started: Boolean = false,
+        /** Сколько байт компьютер подтвердил: по нему отправка догоняет получателя. */
+        var acked: Long = 0
     )
 
     private val incoming = HashMap<String, Incoming>()
     private val outgoing = HashMap<String, Outgoing>()
     private val lock = Any()
+
+    /** Подтверждения компьютера: отправка ждёт их, иначе чанки копятся в сокете. */
+    private val ackLock = Object()
+
     private var pendingChunk: Pair<String, Long>? = null
 
     /** Колбэк прогресса вызывается из сетевого потока. */
@@ -104,30 +112,45 @@ class FileTransfer(
         synchronized(lock) { pendingChunk = id to envelope.long("offset") }
     }
 
-    /** Бинарный кадр не несёт id: он относится к последнему заголовку `file.chunk`. */
+    /**
+     * Бинарный кадр не несёт id: он относится к последнему заголовку `file.chunk`.
+     * Данные пишутся по смещению из описания, а не по своему счётчику: потерянный
+     * или повторно пришедший чанк сдвинул бы счётчик, и файл оказался бы битым.
+     */
     fun onBinary(payload: ByteArray) {
         if (payload.isEmpty()) return
         var item: Incoming? = null
+        var offset = 0L
         synchronized(lock) {
             val pending = pendingChunk
             pendingChunk = null
-            if (pending != null) item = incoming[pending.first]
+            if (pending != null) {
+                item = incoming[pending.first]
+                offset = pending.second
+            }
         }
         val current = item ?: return
         try {
+            if (offset < 0 || offset > current.total) {
+                fail(current.id, "Смещение чанка вне файла")
+                return
+            }
             current.part.parentFile?.mkdirs()
             java.io.RandomAccessFile(current.part, "rw").use { file ->
-                if (current.received == 0L) file.setLength(0)
-                file.seek(current.received)
-                val room = minOf(payload.size.toLong(), current.total - current.received)
-                if (room <= 0) return
-                file.write(payload, 0, room.toInt())
+                // Файл заранее растягивается до полного размера: место выделяется
+                // одним куском, а полнота в конце проверяется по счётчику.
+                if (file.length() != current.total) file.setLength(current.total)
+                file.seek(offset)
+                val room = minOf(payload.size.toLong(), current.total - offset)
+                if (room > 0) file.write(payload, 0, room.toInt())
             }
-            current.received += minOf(payload.size.toLong(), current.total - current.received)
+            current.received = maxOf(current.received, offset + minOf(payload.size.toLong(), current.total - offset))
             val received = current.received
-            val shouldAck = received % ACK_EVERY < CHUNK || received >= current.total
-            if (shouldAck) {
+            // Подтверждаем не каждый чанк: на Bluetooth кадр подтверждения стоит
+            // столько же, сколько чанк данных.
+            if (received >= current.total || received - current.reported >= ACK_EVERY) {
                 client.send("file.ack", org.json.JSONObject().apply { put("id", current.id); put("offset", received) })
+                current.reported = received
             }
             report(Progress(current.id, current.name, true, received, current.total))
         } catch (e: Exception) {
@@ -138,8 +161,9 @@ class FileTransfer(
     private fun finish(id: String) {
         val item = synchronized(lock) { incoming.remove(id) } ?: return
         try {
-            val length = if (item.part.exists()) item.part.length() else 0L
-            if (length < item.total) {
+            // Файл заранее растянут до полного размера, поэтому длина на диске
+            // ничего не говорит: полноту даёт только счётчик принятых байт.
+            if (item.received < item.total) {
                 item.part.delete()
                 fail(id, "Передача прервалась — файл не сохранён")
                 return
@@ -184,14 +208,22 @@ class FileTransfer(
     /** Компьютер начал передачу после нашего согласия — качаем по чанкам. */
     private fun acknowledge(envelope: Envelope) {
         val id = envelope.str("id")
-        val item = synchronized(lock) {
-            val found = outgoing[id] ?: return@synchronized null
-            if (found.started) return@synchronized null
-            if (envelope.long("offset") != 0L) return@synchronized null
-            found.started = true
-            found
-        } ?: return
-        Thread { pump(item) }.apply { isDaemon = true }.start()
+        val offset = envelope.long("offset")
+        var item: Outgoing? = null
+        synchronized(lock) {
+            val found = outgoing[id] ?: return
+            if (found.started) {
+                // Промежуточное подтверждение: отпускаем отправку, чтобы она
+                // не обгоняла получателя и не забивала сокет.
+                found.acked = maxOf(found.acked, offset)
+            } else if (offset == 0L) {
+                found.started = true
+                item = found
+            }
+        }
+        synchronized(ackLock) { ackLock.notifyAll() }
+        val ready = item ?: return
+        Thread { pump(ready) }.apply { isDaemon = true }.start()
     }
 
     private fun pump(item: Outgoing) {
@@ -204,6 +236,10 @@ class FileTransfer(
                 val buffer = ByteArray(CHUNK)
                 var offset = 0L
                 while (offset < item.total) {
+                    // Ждём, пока компьютер подтвердит прочитанное: без этого
+                    // очередь чанков росла в памяти и в сокете, а на Bluetooth
+                    // канал захлёбывался и рвался.
+                    awaitWindow(item, offset)
                     val read = stream.read(buffer)
                     if (read <= 0) break
                     val chunk = if (read == buffer.size) buffer.copyOf() else buffer.copyOf(read)
@@ -213,10 +249,11 @@ class FileTransfer(
                         put("length", chunk.size)
                         put("binary", true)
                     }
-                    client.sendChunk("file.chunk", meta, chunk)
+                    if (!client.sendChunk("file.chunk", meta, chunk)) {
+                        throw java.io.IOException("Связь с компьютером потеряна")
+                    }
                     offset += chunk.size
                     report(Progress(item.id, item.name, false, offset, item.total))
-                    if (offset % ACK_EVERY < CHUNK) Thread.sleep(15)
                 }
             }
             client.send("file.done", org.json.JSONObject().apply { put("id", item.id) })
@@ -228,6 +265,22 @@ class FileTransfer(
             client.send("file.cancel", org.json.JSONObject().apply { put("id", item.id); put("reason", "read") })
         } finally {
             synchronized(lock) { outgoing.remove(item.id) }
+        }
+    }
+
+    /**
+     * Не даёт отправке уйти вперёд больше, чем на окно. Компьютер подтверждает
+     * принятое через `file.ack`; если подтверждений нет дольше таймаута, канал
+     * считается мёртвым — иначе передача висела бы бесконечно.
+     */
+    private fun awaitWindow(item: Outgoing, offset: Long) {
+        val deadline = System.currentTimeMillis() + ACK_TIMEOUT_MS
+        synchronized(ackLock) {
+            while (offset - item.acked > WINDOW) {
+                val left = deadline - System.currentTimeMillis()
+                if (left <= 0) throw java.io.IOException("Компьютер не подтверждает приём")
+                ackLock.wait(minOf(left, 500L))
+            }
         }
     }
 
@@ -296,6 +349,12 @@ class FileTransfer(
         const val CHUNK = 64 * 1024
         const val ACK_EVERY = 512 * 1024L
         const val MAX_BYTES = 2L * 1024 * 1024 * 1024
+
+        /** Сколько байт можно отправить вперёд неподтверждённых. */
+        const val WINDOW = 4 * 1024 * 1024L
+
+        /** Сколько ждать подтверждения, прежде чем считать канал мёртвым. */
+        const val ACK_TIMEOUT_MS = 30_000L
 
         private val RESERVED = setOf(
             "CON", "PRN", "AUX", "NUL",

@@ -5,16 +5,29 @@ import java.net.URLEncoder
 
 /**
  * Данные сопряжения из QR-кода островка:
- * `dilink://v1?ip=192.168.1.68&port=19532&token=<64 hex>`.
+ * `dilink://v1?ip=192.168.1.68&port=19532&token=<64 hex>&bta=DC:45:46:A3:82:97`.
+ *
+ * Параметр `bta` — MAC Bluetooth-адаптера компьютера. Он не обязателен:
+ * без него связь идёт только по локальной сети.
  */
 data class Pairing(
     val address: String,
     val port: Int,
-    val token: String
+    val token: String,
+    val bluetoothAddress: String = ""
 ) {
     val webSocketUrl: String get() = "ws://$address:$port/di/"
 
-    val display: String get() = "$address:$port"
+    /** Без общей сети адреса нет — тогда остаётся только Bluetooth. */
+    val display: String
+        get() = when {
+            address.isEmpty() && bluetoothAddress.isNotEmpty() -> "Bluetooth"
+            address.isEmpty() -> ""
+            bluetoothAddress.isEmpty() -> "$address:$port"
+            else -> "$address:$port · BT"
+        }
+
+    val hasBluetooth: Boolean get() = bluetoothAddress.isNotEmpty()
 
     companion object {
         private const val SCHEME = "dilink://"
@@ -69,6 +82,7 @@ data class Pairing(
             var address = values["ip"] ?: values["host"] ?: values["addr"] ?: values["address"]
             var port = values["port"]?.toIntOrNull()
             var token = values["token"]
+            val bluetooth = normalizeMac(values["bta"] ?: values["bt"] ?: values["mac"])
 
             if (address == null && authority != null) address = authority
 
@@ -94,7 +108,18 @@ data class Pairing(
             if (port !in 1..65535) return null
             if (token.isNullOrBlank()) token = fallbackToken?.trim()?.takeIf { it.isNotEmpty() }
             if (token.isNullOrBlank()) return null
-            return Pairing(address.trim(), port, token.trim())
+            return Pairing(address.trim(), port, token.trim(), bluetooth)
+        }
+
+        /**
+         * Приводит MAC к виду DC:45:46:A3:82:97. Принимает и адрес без
+         * разделителей: разные камеры и клавиатуры показывают его по-разному.
+         */
+        fun normalizeMac(raw: String?): String {
+            if (raw.isNullOrBlank()) return ""
+            val digits = raw.filter { it.isLetterOrDigit() }.uppercase()
+            if (digits.length != 12 || digits.any { it !in "0123456789ABCDEF" }) return ""
+            return digits.chunked(2).joinToString(":")
         }
 
         private fun parseQuery(query: String): HashMap<String, String> {
@@ -112,9 +137,10 @@ data class Pairing(
         }
 
         /** Собирает ссылку сопряжения — используется в тестах и при ручном вводе. */
-        fun build(address: String, port: Int, token: String): String =
+        fun build(address: String, port: Int, token: String, bluetooth: String = ""): String =
             "$SCHEME" + "v1?ip=${URLEncoder.encode(address, "UTF-8")}" +
-                "&port=$port&token=${URLEncoder.encode(token, "UTF-8")}"
+                "&port=$port&token=${URLEncoder.encode(token, "UTF-8")}" +
+                if (bluetooth.isEmpty()) "" else "&bta=" + URLEncoder.encode(bluetooth, "UTF-8")
 
         const val DEFAULT_PORT = 19532
     }

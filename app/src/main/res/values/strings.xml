@@ -17,11 +17,26 @@
     <string name="status_connected">Подключено к %1$s</string>
     <string name="status_paired_none">Телефон не сопряжён</string>
     <string name="status_paired">Компьютер: %1$s:%2$d</string>
-    <string name="pair_hint">Откройте на компьютере панель «Телефон» и наведите камеру телефона на QR-код. Ключ из кода станет постоянным — повторно сканировать не придётся.</string>
+    <string name="status_paired_bluetooth">Компьютер по Bluetooth: %1$s</string>
+    <string name="row_prefer_bluetooth">Bluetooth в приоритете для отправки</string>
+    <string name="prefer_bluetooth_hint">Связь держится по Wi-Fi и Bluetooth одновременно: обрыв одного канала не рвёт соединение. Этот переключатель выбирает лишь основной канал для отправки. Сеть быстрее, Bluetooth работает без общей сети.</string>
+    <string name="pair_hint">Откройте на компьютере панель «Телефон» и наведите камеру телефона на QR-код. Ключ из кода станет постоянным — повторно сканировать не придётся. Если общей сети нет, нажмите «Найти компьютер по Bluetooth»: камера и браузер не понадобятся.</string>
 
     <string name="action_camera">Открыть камеру</string>
     <string name="camera_unavailable">На телефоне не нашлось камеры. Скопируйте ссылку или впишите адрес с ключом ниже.</string>
     <string name="camera_hint">Камера откроет страницу сопряжения в браузере, а та запустит DI Link.</string>
+    <string name="action_find_computer">Найти компьютер по Bluetooth</string>
+    <string name="find_computer_hint">Не нужен ни QR, ни браузер: телефон сам находит компьютер рядом, а компьютер спрашивает разрешение на сопряжение — как в Quick Share.</string>
+    <string name="bluetooth_off">Bluetooth выключен. Включите его на телефоне.</string>
+    <string name="bluetooth_permission_needed">Нужен доступ к Bluetooth и поиску устройств.</string>
+    <string name="bluetooth_searching">Ищу компьютер рядом…</string>
+    <string name="bluetooth_none_found">Рядом не нашлось компьютеров. Проверьте, что на компьютере включён Bluetooth и открыта панель «Телефон».</string>
+    <string name="bluetooth_pairing_failed">Не получилось сопрячься: %1$s</string>
+    <string name="pair_confirm_title">Сопряжение с компьютером</string>
+    <string name="pair_confirm_message">%1$s\nКлюч: %2$s</string>
+    <string name="bluetooth_device_title">Устройства рядом</string>
+    <string name="bluetooth_device_bonded">сопряжён</string>
+    <string name="bluetooth_address_missing">Bluetooth-адрес компьютера неизвестен: сопрягите телефон заново — по QR или кнопкой «Найти компьютер по Bluetooth».</string>
     <string name="section_manual">Подключение без QR</string>
     <string name="manual_hint">Камера телефона не всегда открывает приложение по QR-коду: иногда она лишь распознаёт ссылку. Тогда скопируйте её и вставьте сюда — или впишите адрес и ключ вручную.</string>
     <string name="manual_link_hint">Ссылка: dilink://v1?ip=…&amp;port=…&amp;token=… или 192.168.1.4:19532</string>
@@ -54,6 +69,7 @@
     <string name="transfer_locate_copy">Скопировать путь</string>
     <string name="transfer_locate_copied">Путь скопирован в буфер обмена</string>
 
+    <string name="section_connection">Соединение</string>
     <string name="section_sync">Что синхронизировать</string>
     <string name="row_clipboard">Буфер обмена</string>
     <string name="row_notifications">Уведомления на компьютер</string>
@@ -64,7 +80,7 @@
     <string name="row_auto">Подключаться при запуске</string>
     <string name="row_idle">Отключаться при простое</string>
     <string name="row_idle_minutes">Отключать через, мин</string>
-    <string name="idle_hint">Если с компьютером нет обмена дольше этого времени, канал закрывается: сокет и фоновая служба останавливаются, данные с телефона в сеть больше не уходят. Холодный старт — по кнопке «Подключить».</string>
+    <string name="idle_hint">Если с компьютером нет обмена дольше этого времени, канал по Wi-Fi закрывается, и данные с телефона в сеть больше не уходят. Канал по Bluetooth от простоя не зависит: он живёт, пока устройства на связи. Холодный старт — по кнопке «Подключиться».</string>
     <string name="wifi_only_hint">В режиме «только Wi-Fi» уведомления не расходуют мобильный трафик. Без Wi-Fi связь всё равно работает, но уведомления не отправляются.</string>
 
     <string name="section_access">Доступы и исключения</string>
@@ -137,5 +153,5 @@
     <string name="share_title">Отправить на компьютер?</string>
     <string name="share_sending">Отправка…</string>
     <string name="share_no_link">Нет связи с компьютером</string>
-    <string name="version_line">DI Link %1$s · Dynamic Island 1.6</string>
+    <string name="version_line">DI Link %1$s · Dynamic Island 1.8.2</string>
 </resources>

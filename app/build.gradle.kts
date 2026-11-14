@@ -18,8 +18,8 @@ android {
         applicationId = "com.dynamicisland.dilink"
         minSdk = 24
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.6.0"
+        versionCode = 11
+        versionName = "1.8.2"
     }
 
     signingConfigs {

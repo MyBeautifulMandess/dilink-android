@@ -39,7 +39,25 @@ class SettingsFragment : Fragment() {
         bind(binding.switchPlanner, { settings.plannerSync }, { settings.plannerSync = it })
         bind(binding.switchWifi, { settings.wifiOnly }, { settings.wifiOnly = it })
         bind(binding.switchAuto, { settings.autoConnect }, { settings.autoConnect = it })
+
+        bind(binding.switchBluetooth, { settings.preferBluetooth }, { settings.preferBluetooth = it })
+        // Смена предпочтения — это смена транспорта: канал пересобирается сразу,
+        // иначе переключатель выглядел бы рабочим, а связь оставалась прежней.
+        binding.switchBluetooth.setOnCheckedChangeListener { _, value ->
+            if (bindingUp) return@setOnCheckedChangeListener
+            settings.preferBluetooth = value
+            renderTransport()
+            LinkService.instance?.reconnect()
+        }
+
         bind(binding.switchIdle, { settings.idleDisconnect }, { settings.idleDisconnect = it })
+        binding.switchIdle.setOnCheckedChangeListener { _, value ->
+            if (bindingUp) return@setOnCheckedChangeListener
+            settings.idleDisconnect = value
+            renderIdle()
+        }
+        renderTransport()
+        renderIdle()
 
         binding.idleMinutes.setText(settings.idleMinutes.toString())
         binding.idleMinutes.setOnFocusChangeListener { _, focused ->
@@ -87,6 +105,33 @@ class SettingsFragment : Fragment() {
         }
         settings.idleMinutes = value
         binding.idleMinutes.setText(settings.idleMinutes.toString())
+    }
+
+    /**
+     * Bluetooth включается только тогда, когда телефон знает адрес адаптера
+     * компьютера: без него запасного пути нет, и переключатель был бы ложью.
+     * Адрес приходит в QR-коде или при знакомстве по Bluetooth.
+     */
+    private fun renderTransport() {
+        val available = settings.bluetoothAddress.isNotEmpty()
+        val switch = binding.switchBluetooth
+        if (!available && switch.isChecked) {
+            bindingUp = true
+            switch.isChecked = false
+            bindingUp = false
+            settings.preferBluetooth = false
+        }
+        switch.isEnabled = available
+        binding.bluetoothHint.text = getString(
+            if (available) R.string.prefer_bluetooth_hint else R.string.bluetooth_address_missing
+        )
+    }
+
+    /** Поле минут нужно только при включённом автозакрытии: иначе это шум в настройках. */
+    private fun renderIdle() {
+        val on = settings.idleDisconnect
+        binding.idleRow.visibility = if (on) View.VISIBLE else View.GONE
+        binding.idleHint.visibility = if (on) View.VISIBLE else View.GONE
     }
 
     private fun addIgnored() {
